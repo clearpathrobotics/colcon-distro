@@ -1,5 +1,4 @@
 
-import asyncio
 import re
 import logging
 
@@ -23,18 +22,15 @@ class GitTarballDownloader:
     def __init__(self, **args):
         self.args = args
     
-    async def download_to(self, download_semaphore, http_client, version, download_dir):
+    async def download(self, http_client, version):
         tarball_url = self.TARBALL_URL.format(version=version, **self.args)
-        async with download_semaphore:
-            response = await http_client.get(tarball_url)
+        response = await http_client.get(tarball_url)
         if response.status_code != 200:
+            # raise exception here instead?
             logger.error(f"Received HTTP {response.status_code} while fetching {tarball_url}")
             return False
         logger.info(f"Fetched {self.args['repo_path']}")
-        tarproc = await asyncio.create_subprocess_exec('tar', '-xz', stdin=asyncio.subprocess.PIPE)
-        await tarproc.communicate(input=response.content)
-        logger.info(f"Extracted to {download_dir}")
-        return True
+        return response.content
 
 
 class GithubDownloader(GitTarballDownloader):

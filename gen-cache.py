@@ -16,6 +16,16 @@ import logging
 
 logging.basicConfig(level=logging.DEBUG)
 
+
+set_default_config_path(path="foo")
+
+parser = ArgumentParser()
+add_packages_arguments(parser)
+args = parser.parse_args()
+extensions = get_package_identification_extensions()
+
+
+
 DIST_GIT = "http://gitlab.clearpathrobotics.com/sweng-infra/rosdistro_internal"
 DIST_YAML_URL = "/raw/{}/indigo/distribution.yaml"
 SNAPSHOT = "refs/snapshot/2.20.0/20200828212120"
@@ -32,34 +42,36 @@ y = yaml.safe_load(resp.text)
 from download import downloader_for
 import httpx
 
-async def do_downloads(working_dir):
+
+async def scan_repositories(working_dir):
     # Limits concurrent downloads.
-    download_semaphore = asyncio.Semaphore(3)
+    download_semaphore = asyncio.Semaphore(8)
 
-    downloads = []
+    repository_scanners = []
     async with httpx.AsyncClient() as http_client:
-        for name, repo_data in islice(y['repositories'].items(), 20):
-            url = repo_data['source']['url']
-            version = repo_data['source']['version']
+        for repository_item in islice(y['repositories'].items(), 10):
+            async def scan_repository(name, repo_data):
+                async with download_semaphore:
+                    tardata = await downloader_for(repo_data['source']['url']).download(http_client, repo_data['source']['version'])
 
-            d = downloader_for(url)
-            downloads.append(d.download_to(download_semaphore, http_client, version, Path(working_dir, name)))
-        await asyncio.gather(*downloads)
+                if not tardata:
+                    return name, []
+                repo_dir = Path(working_dir, name)
+                repo_dir.mkdir()
+                tarproc = await asyncio.create_subprocess_exec('tar', '-xz', cwd=repo_dir, stdin=asyncio.subprocess.PIPE)
+                await tarproc.communicate(input=tardata)
+
+                args.base_paths = [repo_dir]
+                return name, discover_packages(args, extensions)
+
+            repository_scanners.append(scan_repository(*repository_item))
+
+    return await asyncio.gather(*repository_scanners)
 
 import asyncio
 with TemporaryDirectory() as working_dir:
-    asyncio.run(do_downloads(working_dir))
+    scan_results = asyncio.run(scan_repositories(working_dir))
 
-
-
-set_default_config_path(path="foo")
-
-parser = ArgumentParser()
-add_packages_arguments(parser)
-args = parser.parse_args()
-
-extensions = get_package_identification_extensions()
-descriptors = discover_packages(args, extensions)
 
 def dependency_str(dep):
     if isinstance(dep, DependencyDescriptor):
@@ -78,6 +90,7 @@ def descriptor_output(d):
         'depends': depends_output
     }
 
-output = {d.name: descriptor_output(d) for d in sorted(descriptors, key=lambda p: p.name)}
-
-print(yaml.dump(output))
+output = {}
+for repository_name, repository_package_descriptors in scan_results:
+    for package_descriptor in repository_package_descriptors:
+        print(descriptor_output(package_descriptor))
