@@ -39,6 +39,7 @@ resp = requests.get(dist_url)
 
 y = yaml.safe_load(resp.text)
 
+import asyncio
 from download import downloader_for
 import httpx
 
@@ -48,30 +49,31 @@ async def scan_repositories(working_dir):
     download_semaphore = asyncio.Semaphore(8)
 
     repository_scanners = []
-    async with httpx.AsyncClient() as http_client:
-        for repository_item in islice(y['repositories'].items(), 10):
-            async def scan_repository(name, repo_data):
-                async with download_semaphore:
-                    tardata = await downloader_for(repo_data['source']['url']).download(http_client, repo_data['source']['version'])
+    for repository_item in islice(y['repositories'].items(), 10):
+        async def scan_repository(name, repo_data):
+            async with download_semaphore:
+                tardata = await downloader_for(repo_data['source']['url']).download(repo_data['source']['version'])
 
-                if not tardata:
-                    return name, []
-                repo_dir = Path(working_dir, name)
-                repo_dir.mkdir()
-                tarproc = await asyncio.create_subprocess_exec('tar', '-xz', cwd=repo_dir, stdin=asyncio.subprocess.PIPE)
-                await tarproc.communicate(input=tardata)
+            if not tardata:
+                return name, []
+            repo_dir = Path(working_dir, name)
+            repo_dir.mkdir()
+            tarproc = await asyncio.create_subprocess_exec('tar', '-xz', cwd=repo_dir, stdin=asyncio.subprocess.PIPE)
+            await tarproc.communicate(input=tardata)
 
-                args.base_paths = [repo_dir]
-                return name, discover_packages(args, extensions)
+            args.base_paths = [repo_dir]
+            print(name, discover_packages(args, extensions))
 
-            repository_scanners.append(scan_repository(*repository_item))
-
+        repository_scanners.append(scan_repository(*repository_item))
     return await asyncio.gather(*repository_scanners)
 
-import asyncio
-with TemporaryDirectory() as working_dir:
-    scan_results = asyncio.run(scan_repositories(working_dir))
 
+
+with TemporaryDirectory() as working_dir:
+    asyncio.run(scan_repositories(working_dir))
+
+import sys
+sys.exit(0)
 
 def dependency_str(dep):
     if isinstance(dep, DependencyDescriptor):

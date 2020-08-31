@@ -1,13 +1,43 @@
 
+import httpx
 import re
 import logging
+import contextlib
 
 logger = logging.getLogger('download')
 logger.setLevel(logging.INFO)
 
 
+class CountedClient(httpx.AsyncClient):
+    def __init__(self):
+        super().__init__()
+        self.uses = 0
+
+
+class ClientPool:
+    def __init__(self):
+        self.client_dict = {}
+
+    @contextlib.asynccontextmanager
+    async def get(self, server):
+        if server not in self.client_dict:
+            client = CountedClient()
+            self.client_dict[server] = client
+        else:
+            client = self.client_dict[server]
+
+        client.uses += 1
+        yield client
+        client.uses -= 1
+
+        if client.uses == 0:
+            del self.client_dict[server]
+            await client.aclose()
+
+
 class GitTarballDownloader:
     URL_REGEX = re.compile('(?:\w+:\/\/|git@)(?P<server>[\w.-]+)[:/](?P<repo_path>[\w/-]*)(?:\.git)?$')
+    client_pool = ClientPool()
 
     @classmethod
     def from_url(cls, url):
@@ -22,9 +52,10 @@ class GitTarballDownloader:
     def __init__(self, **args):
         self.args = args
     
-    async def download(self, http_client, version):
+    async def download(self, version):
         tarball_url = self.TARBALL_URL.format(version=version, **self.args)
-        response = await http_client.get(tarball_url)
+        async with self.client_pool.get(self.args['server']) as http_client:
+            response = await http_client.get(tarball_url)
         if response.status_code != 200:
             # raise exception here instead?
             logger.error(f"Received HTTP {response.status_code} while fetching {tarball_url}")
