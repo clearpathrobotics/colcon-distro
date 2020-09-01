@@ -1,7 +1,7 @@
 import asyncio
-from collections import defaultdict
 import contextlib
 import httpx
+from io import StringIO
 import re
 import logging
 import os
@@ -44,14 +44,14 @@ class GitTarballDownloader:
         self.__dict__.update(args)
         self.repo_path_quoted = urllib.parse.quote(self.repo_path, safe='')
 
+    @contextlib.asynccontextmanager
     async def stream_repo_tarball(self):
         tarball_url = self.TARBALL_URL.format(**self.__dict__)
         async with self.http_client.get() as client:
             async with client.stream('GET', tarball_url, headers=self.headers) as response:
                 if response.status_code != 200:
                     raise DownloadError(f"Received HTTP {response.status_code} while fetching {tarball_url}")
-                async for chunk in response.aiter_bytes():
-                    yield chunk
+                yield response
         logger.info(f"Finished downloading {self.repo_path}")
 
     async def download_all_to(self, path):
@@ -60,16 +60,31 @@ class GitTarballDownloader:
         therefore do extra stuff like fetch submodules and LFS objects.
         """
         tar_proc = None
-        async for chunk in self.stream_repo_tarball():
-            # Lazy-start the tar process to avoid leaving it hanging
-            # if the download fails to start.
-            if not tar_proc:
-                tar_proc = await asyncio.create_subprocess_exec('tar', '-xz', '--strip-components=1',
-                        cwd=path, stdin=asyncio.subprocess.PIPE)
-            tar_proc.stdin.write(chunk)
-            await tar_proc.stdin.drain()
-        tar_proc.stdin.close()
-        await tar_proc.wait()
+        tar_output = []
+
+        async with self.stream_repo_tarball() as tarball_stream:
+            tar_proc = await asyncio.create_subprocess_exec('tar', '--extract', '--verbose', '--gzip',
+                    cwd=path, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)
+
+            async def pass_stdin():
+                async for chunk in tarball_stream.aiter_bytes():
+                    tar_proc.stdin.write(chunk)
+                    await tar_proc.stdin.drain()
+                tar_proc.stdin.close()
+                await tar_proc.wait()
+
+            async def pass_stdout():
+                line = await tar_proc.stdout.readline()
+                while line:
+                    tar_output.append(line)
+                    line = await tar_proc.stdout.readline()
+
+            await asyncio.wait([pass_stdin(), pass_stdout()])
+
+        for line in tar_output:
+            if line.endswith(b'.gitattributes\n'):
+                # TODO: check for LFS files to also download.
+                pass
 
 
 class GithubDownloader(GitTarballDownloader):
