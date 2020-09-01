@@ -13,10 +13,18 @@ logger.setLevel(logging.INFO)
 
 
 class DownloadError(Exception):
+    """
+    General exception for download-related errors.
+    """
     pass
 
 
 class CountedClient:
+    """
+    The httpx library can use connection pooling if we use a common Client object for
+    all requests. The purpose of this container is supply that common object while still
+    ensuring that it is properly closed when all requests in a batch are complete.
+    """
     def __init__(self):
         self.client = None
         self.count = 0
@@ -37,6 +45,9 @@ class CountedClient:
 
 
 class GitTarballDownloader:
+    """
+    Generic tarball downloader which is specialized in subclasses for specific hosts.
+    """
     http_client = CountedClient()
     headers = {}
 
@@ -46,6 +57,9 @@ class GitTarballDownloader:
 
     @contextlib.asynccontextmanager
     async def stream_repo_tarball(self):
+        """
+        Yields an httpx response object for a stream of the repo's main tarball.
+        """
         tarball_url = self.TARBALL_URL.format(**self.__dict__)
         async with self.http_client.get() as client:
             async with client.stream('GET', tarball_url, headers=self.headers) as response:
@@ -99,6 +113,10 @@ class GitLabDownloader(GitTarballDownloader):
 
 
 class GitRev:
+    """
+    This class is the main entry point of the module, supplying asynchronous methods to
+    intelligently download/access the contents of a remote git repo at a specific ref.
+    """
     URL_REGEX = re.compile('(?:\w+:\/\/|git@)(?P<server>[\w.-]+)[:/](?P<repo_path>[\w/-]*)(?:\.git)?$')
     DOWNLOADERS = [GitLabDownloader, GithubDownloader]
 
