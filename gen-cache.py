@@ -45,24 +45,24 @@ import httpx
 
 from time import sleep
 
-async def scan_repositories():
+def get_repository_scanners():
     # Limits concurrent downloads.
     download_semaphore = asyncio.Semaphore(8)
 
-    repository_scanners = []
-    for repository_item in islice(y['repositories'].items(), 20):
-        async def scan_repository(name, repo_data):
+    async def scan_repository(name, repo_data):
+        src = repo_data['source']
+        gr = GitRev(src['url'], src['version'])
 
-            src = repo_data['source']
-            gr = GitRev(src['url'], src['version'])
+        async with download_semaphore:
+            async with gr.tempdir_download() as repo_dir:
+                args.base_paths = [repo_dir]
+                print(name, sorted([p.name for p in discover_packages(args, extensions)]))
 
-            async with download_semaphore:
-                async with gr.tempdir_download() as repo_dir:
-                    args.base_paths = [repo_dir]
-                    print(name, sorted([p.name for p in discover_packages(args, extensions)]))
+    for repository_item in islice(y['repositories'].items(), 5):
+        yield scan_repository(*repository_item)
 
-        repository_scanners.append(scan_repository(*repository_item))
-    return await asyncio.gather(*repository_scanners, return_exceptions=True)
+async def scan_repositories():
+    return await asyncio.gather(*get_repository_scanners(), return_exceptions=True)
 
 for x in asyncio.run(scan_repositories()):
     if x: print(x)
