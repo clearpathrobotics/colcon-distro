@@ -22,7 +22,7 @@ class DownloadError(Exception):
 class CountedClient:
     """
     The httpx library can use connection pooling if we use a common Client object for
-    all requests. The purpose of this container is supply that common object while still
+    all requests. The purpose of this container is to supply that common object while still
     ensuring that it is properly closed when all requests in a batch are complete.
     """
     def __init__(self):
@@ -126,7 +126,6 @@ class GitRev:
             raise DownloadError(f"Unable to parse version control URL: {url}")
         self.__dict__.update(match.groupdict())
         self.version = version
-        self.downloader = self._get_downloader()
 
     def _get_downloader(self):
         for dl in self.DOWNLOADERS:
@@ -138,5 +137,5 @@ class GitRev:
     async def tempdir_download(self):
         dirname = self.repo_path.replace('/', '-')
         with TemporaryDirectory(suffix=dirname) as tempdir:
-            await self.downloader.download_all_to(tempdir)
+            await self._get_downloader().download_all_to(tempdir)
             yield tempdir
