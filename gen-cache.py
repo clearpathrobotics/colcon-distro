@@ -56,7 +56,7 @@ def get_repository_scanners():
         async with download_semaphore:
             async with gr.tempdir_download() as repo_dir:
                 args.base_paths = [repo_dir]
-                print(name, sorted([p.name for p in discover_packages(args, extensions)]))
+                return name, discover_packages(args, extensions)
 
     for repository_item in islice(y['repositories'].items(), 5):
         yield scan_repository(*repository_item)
@@ -64,12 +64,13 @@ def get_repository_scanners():
 async def scan_repositories():
     return await asyncio.gather(*get_repository_scanners(), return_exceptions=True)
 
+scan_results = []
 for x in asyncio.run(scan_repositories()):
-    if x: print(x)
+    if isinstance(x, Exception):
+        print(x)
+    else:
+        scan_results.append(x)
 
-
-import sys
-sys.exit(0)
 
 def dependency_str(dep):
     if isinstance(dep, DependencyDescriptor):
