@@ -1,31 +1,24 @@
-from argparse import ArgumentParser
 from colcon_core.dependency_descriptor import DependencyDescriptor
 from colcon_core.package_discovery import discover_packages
-from colcon_core.package_selection import add_arguments as add_packages_arguments
 from colcon_core.package_identification import get_package_identification_extensions
-from colcon_core.location import set_default_config_path
 
+import argparse
 import asyncio
 import httpx
 from itertools import islice
+import logging
 from pathlib import Path
 import requests
 import subprocess
 from tempfile import TemporaryDirectory
 import yaml
-import logging
 
 from .download import GitRev
 
 
 logging.basicConfig(level=logging.DEBUG)
 
-
-set_default_config_path(path="foo")
-
-parser = ArgumentParser()
-add_packages_arguments(parser)
-args = parser.parse_args()
+args = argparse.Namespace(base_paths=['.'], ignore_user_meta=True, paths=None, metas=['./colcon.meta'])
 extensions = get_package_identification_extensions()
 
 async def scan_repositories(repositories):
