@@ -40,37 +40,33 @@ resp = requests.get(dist_url)
 y = yaml.safe_load(resp.text)
 
 import asyncio
-from download import downloader_for
+from download import GitRev
 import httpx
 
+from time import sleep
 
-async def scan_repositories(working_dir):
+async def scan_repositories():
     # Limits concurrent downloads.
     download_semaphore = asyncio.Semaphore(8)
 
     repository_scanners = []
-    for repository_item in islice(y['repositories'].items(), 10):
+    for repository_item in islice(y['repositories'].items(), 20):
         async def scan_repository(name, repo_data):
+
+            src = repo_data['source']
+            gr = GitRev(src['url'], src['version'])
+
             async with download_semaphore:
-                tardata = await downloader_for(repo_data['source']['url']).download(repo_data['source']['version'])
-
-            if not tardata:
-                return name, []
-            repo_dir = Path(working_dir, name)
-            repo_dir.mkdir()
-            tarproc = await asyncio.create_subprocess_exec('tar', '-xz', cwd=repo_dir, stdin=asyncio.subprocess.PIPE)
-            await tarproc.communicate(input=tardata)
-
-            args.base_paths = [repo_dir]
-            print(name, discover_packages(args, extensions))
+                async with gr.tempdir_download() as repo_dir:
+                    args.base_paths = [repo_dir]
+                    print(name, sorted([p.name for p in discover_packages(args, extensions)]))
 
         repository_scanners.append(scan_repository(*repository_item))
-    return await asyncio.gather(*repository_scanners)
+    return await asyncio.gather(*repository_scanners, return_exceptions=True)
 
+for x in asyncio.run(scan_repositories()):
+    if x: print(x)
 
-
-with TemporaryDirectory() as working_dir:
-    asyncio.run(scan_repositories(working_dir))
 
 import sys
 sys.exit(0)
