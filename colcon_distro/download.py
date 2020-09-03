@@ -8,7 +8,7 @@ import os
 from tempfile import TemporaryDirectory
 import urllib.parse
 
-logger = logging.getLogger('download')
+logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
@@ -53,20 +53,38 @@ class GitTarballDownloader:
 
     def __init__(self, **args):
         self.__dict__.update(args)
+        self.base_url = self.BASE_URL.format(server=self.server)
         self.repo_path_quoted = urllib.parse.quote(self.repo_path, safe='')
+
+    @contextlib.asynccontextmanager
+    async def stream_resource(self, url_path):
+        """
+        Yields an httpx response object for a resource on the git server.
+        """
+        url = f"{self.base_url}/{url_path}"
+        async with self.http_client.get() as client:
+            async with client.stream('GET', url, headers=self.headers) as response:
+                if response.status_code != 200:
+                    raise DownloadError(f"Received HTTP {response.status_code} while fetching {url}")
+                yield response
 
     @contextlib.asynccontextmanager
     async def stream_repo_tarball(self):
         """
         Yields an httpx response object for a stream of the repo's main tarball.
         """
-        tarball_url = self.TARBALL_URL.format(**self.__dict__)
-        async with self.http_client.get() as client:
-            async with client.stream('GET', tarball_url, headers=self.headers) as response:
-                if response.status_code != 200:
-                    raise DownloadError(f"Received HTTP {response.status_code} while fetching {tarball_url}")
-                yield response
-        logger.info(f"Finished downloading {self.repo_path}")
+        url_path = self.TARBALL_PATH.format(**self.__dict__)
+        async with self.stream_resource(url_path) as response:
+            yield response
+
+    @contextlib.asynccontextmanager
+    async def stream_repo_file(self, path):
+        """
+        Yields an httpx response object for a stream of a repository file.
+        """
+        url_path = self.FILE_PATH.format(path=path, **self.__dict__)
+        async with self.stream_resource(url_path) as response:
+            yield response
 
     async def download_all_to(self, path):
         """
@@ -103,12 +121,15 @@ class GitTarballDownloader:
 
 class GithubDownloader(GitTarballDownloader):
     SERVER_REGEX = re.compile(r'^github\.com')
-    TARBALL_URL = 'https://{server}/{repo_path}/archive/{version}.tar.gz'
+    BASE_URL = 'https://{server}'
+    TARBALL_PATH = '{repo_path}/archive/{version}.tar.gz'
 
 
 class GitLabDownloader(GitTarballDownloader):
     SERVER_REGEX = re.compile(r'^gitlab\.')
-    TARBALL_URL = 'http://{server}/api/v4/projects/{repo_path_quoted}/repository/archive.tar.gz?sha={version}'
+    BASE_URL = 'http://{server}'
+    TARBALL_PATH = 'api/v4/projects/{repo_path_quoted}/repository/archive.tar.gz?sha={version}'
+    FILE_PATH = '{repo_path}/raw/{version}/{path}'
     headers = { 'PRIVATE-TOKEN': os.environ.get('GITLAB_PRIVATE_TOKEN', '') }
 
 
@@ -125,7 +146,9 @@ class GitRev:
         if not match:
             raise DownloadError(f"Unable to parse version control URL: {url}")
         self.__dict__.update(match.groupdict())
+        self.url = url
         self.version = version
+        self.downloader = self._get_downloader()
 
     def _get_downloader(self):
         for dl in self.DOWNLOADERS:
@@ -137,5 +160,18 @@ class GitRev:
     async def tempdir_download(self):
         dirname = self.repo_path.replace('/', '-')
         with TemporaryDirectory(suffix=dirname) as tempdir:
-            await self._get_downloader().download_all_to(tempdir)
+            await self.downloader.download_all_to(tempdir)
+            logger.info(f"> {self.url} @ {self.version}")
             yield tempdir
+
+    async def version_hash_lookup(self):
+        git_proc = await asyncio.create_subprocess_exec('git', 'ls-remote', self.url, self.version,
+                                                        stdout=asyncio.subprocess.PIPE)
+        git_output, git_stderr = await git_proc.communicate()
+        if git_stderr:
+            logger.error(f"Unexpected error output from git ls-remote: {git_stderr}")
+        return git_output.split()[0].decode()
+
+    async def get_file(self, path):
+        async with self.downloader.stream_repo_file(path) as response:
+            return await response.aread()

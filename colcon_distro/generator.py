@@ -4,26 +4,18 @@ from colcon_core.package_identification import get_package_identification_extens
 
 import argparse
 import asyncio
-import httpx
 from itertools import islice
 import logging
-from pathlib import Path
-import requests
-import subprocess
-from tempfile import TemporaryDirectory
-import yaml
 
 from .download import GitRev
 
 
-logging.basicConfig(level=logging.DEBUG)
-
 args = argparse.Namespace(base_paths=['.'], ignore_user_meta=True, paths=None, metas=['./colcon.meta'])
 extensions = get_package_identification_extensions()
 
-async def scan_repositories(repositories):
+async def scan_repositories(repositories, parallelism=8):
     # Limits concurrent downloads.
-    download_semaphore = asyncio.Semaphore(8)
+    download_semaphore = asyncio.Semaphore(parallelism)
 
     async def scan_repository(name, repo_data):
         src = repo_data['source']
@@ -32,10 +24,11 @@ async def scan_repositories(repositories):
         async with download_semaphore:
             async with gr.tempdir_download() as repo_dir:
                 args.base_paths = [repo_dir]
-                return name, discover_packages(args, extensions)
+                package_descriptors = discover_packages(args, extensions)
+                return name, 'git', src['url'], src['version'], package_descriptors
 
     def get_scanners():
-        for repository_item in islice(repositories.items(), 5):
+        for repository_item in islice(repositories.items(), 10):
             yield scan_repository(*repository_item)
 
     return await asyncio.gather(*get_scanners(), return_exceptions=True)
@@ -56,28 +49,3 @@ def descriptor_output(d):
         'type': d.type,
         'depends': depends_output
     }
-
-def main():
-    DIST_GIT = "http://gitlab.clearpathrobotics.com/sweng-infra/rosdistro_internal"
-    DIST_YAML_URL = "/raw/{}/indigo/distribution.yaml"
-    SNAPSHOT = "refs/snapshot/2.20.0/20200828212120"
-
-    output = subprocess.check_output(['git', 'ls-remote', DIST_GIT + '.git', SNAPSHOT], universal_newlines=True)
-    githash = output.split()[0]
-
-    dist_url = DIST_GIT + DIST_YAML_URL.format(githash)
-
-    resp = requests.get(dist_url)
-
-    y = yaml.safe_load(resp.text)
-
-    scan_results = []
-    for x in asyncio.run(scan_repositories(y['repositories'])):
-        if isinstance(x, Exception):
-            print(x)
-        else:
-            scan_results.append(x)
-
-    for repository_name, repository_package_descriptors in scan_results:
-        for package_descriptor in repository_package_descriptors:
-            print(descriptor_output(package_descriptor))
