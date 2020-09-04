@@ -35,13 +35,14 @@ def main():
 
         import yaml
         y = yaml.safe_load(yaml_str)
-        scan_results = []
-        for x in asyncio.run(scan_repositories(y['repositories'])):
-            if isinstance(x, Exception):
-                print(x)
-            else:
-                scan_results.append(x)
 
-        for res in scan_results:
-            for package_descriptor in res[-1]:
-                print(package_descriptor)
+        async def do_scan():
+            scan_results = []
+            async for x in scan_repositories(y['repositories']):
+                if isinstance(x, Exception):
+                    logger.error(x)
+                else:
+                    for package_descriptor in x[-1]:
+                        print(package_descriptor.name)
+
+        asyncio.run(do_scan())

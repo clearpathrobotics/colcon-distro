@@ -66,7 +66,7 @@ class GitTarballDownloader:
         async with self.http_client.get() as client:
             async with client.stream('GET', url, headers=(headers or self.headers)) as response:
                 if response.status_code != 200:
-                    raise DownloadError(f"Received HTTP {response.status_code} while fetching {url}")
+                    raise DownloadError(f"HTTP {response.status_code} fetching {url}")
                 yield response
 
     @contextlib.asynccontextmanager
@@ -157,7 +157,7 @@ class GitTarballDownloader:
                             return
                         match = re.match("oid sha256:([0-9a-f]+)\nsize ([0-9]+)", f.read(), re.MULTILINE)
                         if not match:
-                            raise DownloadException(f"Unable to parse LFS information for {filepath}")
+                            raise DownloadError(f"Unable to parse LFS information for {filepath}")
                         lfs_sha, lfs_size = match.groups()
                         yield lfs_sha, (lfs_filepath, lfs_size)
 

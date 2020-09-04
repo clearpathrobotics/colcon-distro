@@ -27,11 +27,17 @@ async def scan_repositories(repositories, parallelism=8):
                 package_descriptors = discover_packages(args, extensions)
                 return name, 'git', src['url'], src['version'], package_descriptors
 
-    def get_scanners():
-        for repository_item in islice(repositories.items(), 10):
-            yield scan_repository(*repository_item)
+    # Temporarily reduce the list so we don't hammer the servers during development.
+    repositories = dict(islice(repositories.items(), 10))
 
-    return await asyncio.gather(*get_scanners(), return_exceptions=True)
+    active = [scan_repository(*item) for item in repositories.items()]
+    while active:
+        finished, active = await asyncio.wait(active, return_when=asyncio.FIRST_COMPLETED)
+        for task in finished:
+            if task.exception():
+                yield task.exception()
+            else:
+                yield task.result()
 
 def dependency_str(dep):
     if isinstance(dep, DependencyDescriptor):
