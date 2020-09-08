@@ -28,7 +28,7 @@ CREATE TABLE repo_states (
     package_descriptors TEXT NOT NULL
 );
 
-CREATE INDEX repo_state_index ON repo_states(name, url, version);
+CREATE UNIQUE INDEX repo_state_index ON repo_states(name, url, version);
 
 /*
 Each repo set corresponds to a moment in time for the distro repo. If this is an
@@ -54,5 +54,6 @@ CREATE TABLE set_repo_states (
     set_id INTEGER NOT NULL,
     repo_state_id INTEGER NOT NULL,
     FOREIGN KEY(set_id) REFERENCES sets(id) ON DELETE CASCADE,
-    FOREIGN KEY(repo_state_id) REFERENCES repo_states(id) ON DELETE RESTRICT
+    FOREIGN KEY(repo_state_id) REFERENCES repo_states(id) ON DELETE RESTRICT,
+    UNIQUE(set_id, repo_state_id) ON CONFLICT ABORT
 );

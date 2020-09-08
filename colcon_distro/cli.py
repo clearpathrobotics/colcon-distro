@@ -6,6 +6,7 @@ from .config import add_config_args, get_config
 from .database import Database
 from .download import GitRev
 from .generator import scan_repositories
+from .model import Model
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -26,6 +27,7 @@ def main():
     config = get_config(args)
 
     db = Database(config)
+    model = Model(db)
 
     for ref in args.ref:
         distro_rev = GitRev(config.distro.repository, ref)
@@ -37,12 +39,16 @@ def main():
         y = yaml.safe_load(yaml_str)
 
         async def do_scan():
-            scan_results = []
+            repo_state_ids = set()
             async for x in scan_repositories(y['repositories']):
                 if isinstance(x, Exception):
                     logger.error(x)
                 else:
-                    for package_descriptor in x[-1]:
-                        print(package_descriptor.name)
+                    repo_state_ids.add(await db.insert_repo_state(*x))
+            await db.insert_set(ref, repo_state_ids)
 
         asyncio.run(do_scan())
+
+        r = asyncio.run(db.fetch_set(ref))
+        for x in r:
+            print(x)
