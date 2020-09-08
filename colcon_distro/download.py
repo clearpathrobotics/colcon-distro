@@ -27,6 +27,7 @@ class CountedClient:
     ensuring that it is properly closed when all requests in a batch are complete.
     """
     def __init__(self):
+        self.sem = None
         self.client = None
         self.count = 0
 
@@ -34,10 +35,13 @@ class CountedClient:
     async def get(self):
         if not self.client:
             self.client = httpx.AsyncClient()
+        if not self.sem:
+            self.sem = asyncio.Semaphore(8)
 
-        self.count += 1
-        yield self.client
-        self.count -= 1
+        async with self.sem:
+            self.count += 1
+            yield self.client
+            self.count -= 1
 
         if self.count == 0:
             c = self.client
@@ -120,17 +124,38 @@ class GitTarballDownloader:
         logger.info(f"> {self.version} {self.repo_path} [archive]")
 
         # Scan the list of extracted files for .gitattributes which may signal the presence
-        # of LFS files. If so, queue up another coroutine to go looking for them.
+        # of LFS objects which need to be retrieved.
         git_attributes_filepaths = list(_find_files_in_list(path, tar_output, '.gitattributes'))
         if git_attributes_filepaths:
-            lfs_object_dict = await self.download_all_lfs(git_attributes_filepaths)
-            if lfs_count := len(lfs_object_dict):
+            if lfs_object_dict := dict(self.get_lfs_objects(git_attributes_filepaths)):
+                await self.download_all_lfs(lfs_object_dict)
+                lfs_count = len(lfs_object_dict)
                 logger.info(f"> {self.version} {self.repo_path} [{lfs_count} LFS object(s)]")
 
         # TODO: Scan for .gitmodules, and if found, recursively instantiate GitRevs for them
         # so that they also can be download_all_to'd the correct paths.
 
-    async def download_all_lfs(self, git_attributes_filepaths):
+    def get_lfs_objects(self, git_attributes_filepaths):
+        """
+        Open all files matching the gitattributes globs. Generate nested tuples which
+        can become a dict mapping the special LFS hashes back to their actual filenames
+        and sizes.
+
+        This function is synchronous simply because the LFS metadata files are very
+        small and it doesn't seem worth pushing this work off to an executor thread.
+        """
+        for attributes_filepath in git_attributes_filepaths:
+            for lfs_filepath in _find_files_from_git_attributes(attributes_filepath):
+                with open(lfs_filepath, 'r') as f:
+                    if f.readline() != 'version https://git-lfs.github.com/spec/v1\n':
+                        return
+                    match = re.match("oid sha256:([0-9a-f]+)\nsize ([0-9]+)", f.read(), re.MULTILINE)
+                    if not match:
+                        raise DownloadError(f"Unable to parse LFS information for {filepath}")
+                    lfs_sha, lfs_size = match.groups()
+                    yield lfs_sha, (lfs_filepath, lfs_size)
+
+    async def download_all_lfs(self, lfs_object_dict):
         """
         This isn't as bad as it looks. Bascially git-lfs puts marker files in the actual
         repo, and those markers contain a hash which may be used to get an actual download
@@ -141,26 +166,6 @@ class GitTarballDownloader:
         The overall flow is top-to-bottom in this outer function; see the individual pieces
         for further details.
         """
-        def _get_lfs_objects():
-            """
-            Open all files matching the gitattributes globs. Generate nested tuples which
-            can become a dict mapping the special LFS hashes back to their actual filenames
-            and sizes.
-
-            This function is synchronous simply because the LFS metadata files are very
-            small and it doesn't seem worth pushing this work off to an executor thread.
-            """
-            for attributes_filepath in git_attributes_filepaths:
-                for lfs_filepath in _find_files_from_git_attributes(attributes_filepath):
-                    with open(lfs_filepath, 'r') as f:
-                        if f.readline() != 'version https://git-lfs.github.com/spec/v1\n':
-                            return
-                        match = re.match("oid sha256:([0-9a-f]+)\nsize ([0-9]+)", f.read(), re.MULTILINE)
-                        if not match:
-                            raise DownloadError(f"Unable to parse LFS information for {filepath}")
-                        lfs_sha, lfs_size = match.groups()
-                        yield lfs_sha, (lfs_filepath, lfs_size)
-
         def _get_lfs_request(lfs_object_dict):
             """
             Consumes the dict from the above function and returns the JSON-ready object
@@ -176,6 +181,29 @@ class GitTarballDownloader:
                "ref": {"name": self.version}
             }
 
+        def _generate_downloaders(response_objects):
+            """
+            For each object given in the LFS response, this generator yields
+            a downloader coroutine which takes care of writing it to the correct
+            location on disk and confirming the size when finished.
+            """
+            for obj in response_objects:
+                async def _downloader(obj):
+                    dl = obj['actions']['download']
+                    async with self.http_client.get() as client:
+                        stream = client.stream('GET', dl['href'], headers=dl['header'])
+                        async with stream as response:
+                            if response.status_code != 200:
+                                raise DownloadError(f"Received HTTP {response.status_code} while" +
+                                                    f"fetching LFS object from {dl['href']}")
+                            lfs_filepath, lfs_size = lfs_object_dict[obj['oid']]
+                            with open(lfs_filepath, 'wb') as lfs_file:
+                                async for chunk in response.aiter_bytes():
+                                    lfs_file.write(chunk)
+                                if not lfs_file.tell() != lfs_size:
+                                    raise DownloadError(f"LFS object size expected {lfs_size}, actual {lfs_file.tell()}.")
+                yield _downloader(obj)
+
         async with self.http_client.get() as client:
             # Auth for the LFS server is slightly different than main GitLab.
             auth = ('oauth2', self.headers['Private-Token'])
@@ -183,33 +211,12 @@ class GitTarballDownloader:
 
             # This is where we scan for objects in the repo which must be downloaded
             # from LFS, and sent off a list of them to the server.
-            object_dict = dict(_get_lfs_objects())
-            request_json = _get_lfs_request(object_dict)
+            request_json = _get_lfs_request(lfs_object_dict)
             response = await client.post(url, auth=auth, json=request_json)
 
-            def _get_downloaders():
-                """
-                For each object given in the LFS response, this generator yields
-                a downloader coroutine which takes care of writing it to the correct
-                location on disk and confirming the size when finished.
-                """
-                for obj in response.json()['objects']:
-                    async def _downloader(obj):
-                        dl = obj['actions']['download']
-                        stream = client.stream('GET', dl['href'], headers=dl['header'])
-                        async with stream as response:
-                            if response.status_code != 200:
-                                raise DownloadError(f"Received HTTP {response.status_code} while" +
-                                                    f"fetching LFS object from {dl['href']}")
-                            lfs_filepath, lfs_size = object_dict[obj['oid']]
-                            with open(lfs_filepath, 'wb') as lfs_file:
-                                async for chunk in response.aiter_bytes():
-                                    lfs_file.write(chunk)
-                                if not lfs_file.tell() != lfs_size:
-                                    raise DownloadError(f"LFS object size expected {lfs_size}, actual {lfs_file.tell()}.")
-                    yield _downloader(obj)
-            await asyncio.gather(*_get_downloaders())
-        return object_dict
+        if response.status_code != 200:
+            raise DownloadError("Got {response.status_code} accessing {url} for LFS objects.")
+        await asyncio.gather(*_generate_downloaders(response.json()['objects']))
 
 
 def _find_files_in_list(path, file_list, name):

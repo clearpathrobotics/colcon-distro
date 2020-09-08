@@ -22,13 +22,13 @@ in the short term.
 CREATE TABLE repo_states (
     id INTEGER PRIMARY KEY,
     name VARCHAR(64) NOT NULL,
-    vcs VARCHAR(4) NOT NULL,
+    type VARCHAR(4) NOT NULL,
     url VARCHAR(256) NOT NULL,
     version VARCHAR(40) NOT NULL,
     package_descriptors TEXT NOT NULL
 );
 
-CREATE UNIQUE INDEX repo_state_index ON repo_states(name, url, version);
+CREATE UNIQUE INDEX repo_state_index ON repo_states(name, type, url, version);
 
 /*
 Each repo set corresponds to a moment in time for the distro repo. If this is an
