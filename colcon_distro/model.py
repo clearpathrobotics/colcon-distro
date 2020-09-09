@@ -18,8 +18,25 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
+class ModelError(Exception):
+    """
+    General exception for Model-related errors.
+    """
+    pass
+
+class ModelInternalError(ModelError):
+    """
+    Exception for errors which are the result of bugs, for example database
+    queries which fail due to consistency checks.
+    """
+    pass
+
 # TODO: Both methods should be futurized, so that if the same request comes in for something
 # already in progress, we don't start working on it a second time.
+
+# TODO: It would be great to support a distro that's just a directory of files or a locally-
+# modified checkout, rather than needing to be on a known git host. This may require pulling
+# some of that logic into a dedicated Distro class.
 
 class Model:
     def __init__(self, config, db):
@@ -27,7 +44,7 @@ class Model:
         self.db = db
         self.extensions = get_package_identification_extensions()
 
-    async def get_set(self, name):
+    async def get_set(self, dist_name, name):
         """
         Returns a list of repo state rows.
         """
@@ -37,8 +54,8 @@ class Model:
 
         # Check if we have it already in the database, returning as-is if so. Unfortunately
         # we do have to rebuild the list to parse the json, as tuples are immutable.
-        if set_repo_states := await self.db.fetch_set(name):
-            logger.info(f"Returning cache for {name} from the database.")
+        if set_repo_states := await self.db.fetch_set(dist_name, name):
+            logger.info(f"Returning cache for {dist_name}:{name} from the database.")
             parsed_repo_states = []
             for repo_state in set_repo_states:
                 parsed_repo_states.append(repo_state[0:-1] + (json.loads(repo_state[-1]),))
@@ -49,8 +66,14 @@ class Model:
         distro_rev = GitRev(self.config.distro.repository, name)
         distro_rev.version = await distro_rev.version_hash_lookup()
         distro_rev.downloader.version = distro_rev.version
-        yaml_str = await distro_rev.get_file(self.config.distro.distribution_file)
-        distro_obj = yaml.safe_load(yaml_str)
+        index_yaml_str = await distro_rev.get_file(self.config.DIST_INDEX_YAML_FILE)
+        index_obj = yaml.safe_load(index_yaml_str)
+
+        if dist_name in index_obj['distributions']:
+            dist_file_path = index_obj['distributions'][dist_name]['distribution'][0]
+        else:
+            raise ModelError("Unknown distro [{dist_name}] specified.")
+        distro_obj = yaml.safe_load(await distro_rev.get_file(dist_file_path))
 
         def _get_repo_states():
             """ Generate getter coroutines for all repo states. """
@@ -58,12 +81,12 @@ class Model:
                 source = repo_obj['source']
                 yield self.get_repo_state(repo_name, source['type'], source['url'], source['version'])
 
-        logger.info(f"Preparing cache for {name}.")
+        logger.info(f"Preparing cache for {dist_name}:{name}.")
         repo_states = await asyncio.gather(*_get_repo_states())
 
         repo_state_ids = [repo_state_tuple[0] for repo_state_tuple in repo_states]
-        await self.db.insert_set(name, repo_state_ids)
-        logger.info(f"Cache for {name} is now saved to the database")
+        await self.db.insert_set(dist_name, name, repo_state_ids)
+        logger.info(f"Cache for {dist_name}:{name} is now saved to the database")
 
         # Trim off the row_id values as they aren't part of what this function returns.
         repo_states = [repo_state_tuple[1:] for repo_state_tuple in repo_states]

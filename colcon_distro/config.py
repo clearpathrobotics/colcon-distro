@@ -4,12 +4,13 @@ from pathlib import Path
 import toml
 
 
-DistroConfig = namedtuple('DistroConfig', 'repository distribution_file branches')
+DistroConfig = namedtuple('DistroConfig', 'repository distributions branches')
 
 
 class Config:
     DEFAULT_CONFIG_FILE="colcon-distro.toml"
     DEFAULT_DATABASE_FILE="distro.db"
+    DIST_INDEX_YAML_FILE="index.yaml"
 
     def __init__(self, args):
         self.args = args

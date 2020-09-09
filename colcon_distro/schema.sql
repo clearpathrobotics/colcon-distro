@@ -41,14 +41,18 @@ should still be hashes, not branch names.
 */
 CREATE TABLE sets (
     id INTEGER PRIMARY KEY,
+    dist VARCHAR(16) NOT NULL,
     name VARCHAR(64) NOT NULL,
     last_updated DATETIME
 );
 
-CREATE UNIQUE INDEX set_names ON sets(name);
+CREATE UNIQUE INDEX set_names ON sets(name, dist);
 
 /*
-Join table for mapping sets and repo states together.
+Join table for mapping sets and repo states together. These are added last, and
+the intention of the foreign key constraints are that a) deleted sets will automatically
+clean up their associated set_repo_states, and b) repo_states rows will not be removable
+until all the sets using them have also been deleted.
 */
 CREATE TABLE set_repo_states (
     set_id INTEGER NOT NULL,

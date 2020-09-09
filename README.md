@@ -11,7 +11,7 @@ Example configuration:
 ```
 [distro]
 repository = "http://gitlab.clearpathrobotics.com/sweng-infra/rosdistro_internal.git"
-distribution_file = "indigo/distribution.yaml"
+distributions = [ 'indigo' ]
 branches = [ 'master', 'series-.+' ]
 
 [database]
