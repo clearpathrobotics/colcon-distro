@@ -26,26 +26,32 @@ class CountedClient:
     all requests. The purpose of this container is to supply that common object while still
     ensuring that it is properly closed when all requests in a batch are complete.
     """
+    PARALLELISM = 8
+    instance = None
+
     def __init__(self):
         self.sem = None
         self.client = None
-        self.count = 0
 
+    @classmethod
     @contextlib.asynccontextmanager
-    async def get(self):
-        if not self.client:
-            self.client = httpx.AsyncClient()
-        if not self.sem:
-            self.sem = asyncio.Semaphore(8)
+    async def get(cls):
+        if not cls.instance:
+            cls.instance = cls()
 
-        async with self.sem:
-            self.count += 1
-            yield self.client
-            self.count -= 1
+        if not cls.instance.client:
+            cls.instance.client = httpx.AsyncClient()
+            cls.instance.sem = asyncio.Semaphore(cls.PARALLELISM)
 
-        if self.count == 0:
-            c = self.client
-            self.client = None
+        async with cls.instance.sem:
+            yield cls.instance.client
+
+        # Here we peek at the semaphore's internal counter and if it's back at the
+        # original value (all uses have been released) then we shut everything down.
+        if cls.instance.sem._value == cls.PARALLELISM:
+            c = cls.instance.client
+            cls.instance.client = None
+            cls.instance.sem = None
             await c.aclose()
 
 
@@ -53,7 +59,6 @@ class GitTarballDownloader:
     """
     Generic tarball downloader which is lightly specialized in subclasses for specific hosts.
     """
-    http_client = CountedClient()
     headers = {}
 
     def __init__(self, **args):
@@ -67,7 +72,7 @@ class GitTarballDownloader:
         Yields an httpx response object for a resource on the git server.
         """
         url = f"{self.base_url}/{url_path}"
-        async with self.http_client.get() as client:
+        async with CountedClient.get() as client:
             async with client.stream('GET', url, headers=(headers or self.headers)) as response:
                 if response.status_code != 200:
                     raise DownloadError(f"HTTP {response.status_code} fetching {url}")
@@ -190,7 +195,7 @@ class GitTarballDownloader:
             for obj in response_objects:
                 async def _downloader(obj):
                     dl = obj['actions']['download']
-                    async with self.http_client.get() as client:
+                    async with CountedClient.get() as client:
                         stream = client.stream('GET', dl['href'], headers=dl['header'])
                         async with stream as response:
                             if response.status_code != 200:
@@ -204,7 +209,7 @@ class GitTarballDownloader:
                                     raise DownloadError(f"LFS object size expected {lfs_size}, actual {lfs_file.tell()}.")
                 yield _downloader(obj)
 
-        async with self.http_client.get() as client:
+        async with CountedClient.get() as client:
             # Auth for the LFS server is slightly different than main GitLab.
             auth = ('oauth2', self.headers['Private-Token'])
             url = f'{self.base_url}/{self.repo_path}.git/info/lfs/objects/batch'
