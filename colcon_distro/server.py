@@ -8,12 +8,11 @@ from .database import Database
 from .download import GitRev
 from .generator import scan_repositories
 from .model import Model
+from .vendor.compress import Compress
 
-
-#logger = logging.getLogger(__name__)
-#logger.setLevel(logging.INFO)
 
 app = sanic.Sanic(__name__)
+Compress(app)
 
 @app.route("/get/<dist>/<ref:path>.json")
 async def get(request, dist, ref):
@@ -39,10 +38,9 @@ def get_arg_parser():
 
 def main():
     args = get_arg_parser().parse_args()
-    #logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
+    logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
 
     config = get_config(args)
     db = Database(config)
     app.model = Model(config, db)
-
     app.run(host=args.host, port=args.port)

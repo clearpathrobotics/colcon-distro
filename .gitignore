@@ -1,4 +1,6 @@
-*.swp
+*.db
 *.egg-info
-__pycache__
+*.sql
+*.swp
 *.toml
+__pycache__
