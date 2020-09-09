@@ -1,12 +1,7 @@
 
 import aiosqlite
-import asyncio
-import json
-import operator
 import pkg_resources
 import sqlite3
-
-from .package import descriptor_output
 
 
 class Database:
@@ -30,13 +25,12 @@ class Database:
 
     def __init__(self, config):
         self.filepath = config.get_database_filepath()
-
         if not self.filepath.exists():
             self.initialize()
 
     def initialize(self):
         """
-        Initialize a new empty database; this only ever happens at startup, so we
+        Initializes a new empty database; this only ever happens at startup, so we
         just do it synchronously.
         """
         queries = pkg_resources.resource_string(__name__, self.SCHEMA_SCRIPT).decode()
@@ -47,7 +41,7 @@ class Database:
 
     async def fetch_set(self, name):
         """
-        This will return either a full set of repo_state rows if the set is in the
+        Return either a full set of repo_state rows if the set is in the
         database, or the empty set if it is not.
         """
         async with aiosqlite.connect(self.filepath) as db:
@@ -55,25 +49,31 @@ class Database:
             return await cursor.fetchall()
 
     async def fetch_repo_state(self, name, typename, url, version):
+        """
+        Get a single repo state, returning a tuple that is the row id and json string,
+        or None if the row is not found.
+        """
         async with aiosqlite.connect(self.filepath) as db:
             cursor = await db.execute(self.FETCH_REPO_STATE_QUERY, (name, typename, url, version))
             result = await cursor.fetchall()
-            if result:
-                return result[0]
-            else:
-                return None
+            return result[0] if result else None
 
-    async def insert_repo_state(self, name, typename, url, version, package_descriptors):
-        sorted_pds = sorted(package_descriptors, key=operator.attrgetter('name'))
-        pd_str = json.dumps([descriptor_output(pd) for pd in sorted_pds])
-
+    async def insert_repo_state(self, name, typename, url, version, json_str):
+        """
+        Insert a repo state, returning the row id for it. If the row already exists,
+        this query will fail due to db constraints.
+        """
         async with aiosqlite.connect(self.filepath) as db:
-            cursor = await db.execute(self.INSERT_REPO_STATE_QUERY, (name, typename, url, version, pd_str))
-            rowid = cursor.lastrowid
+            cursor = await db.execute(self.INSERT_REPO_STATE_QUERY, (name, typename, url, version, json_str))
+            row_id = cursor.lastrowid
             await db.commit()
-        return rowid
+        return row_id
 
     async def insert_set(self, name, repo_state_ids):
+        """
+        Insert a new set row from name and set of ids, all of which must exist in the repo
+        states table or this query will fail due to db constraints.
+        """
         async with aiosqlite.connect(self.filepath) as db:
             cursor = await db.execute(self.INSERT_SET_QUERY, (name, None))
             set_id = cursor.lastrowid

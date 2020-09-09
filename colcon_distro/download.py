@@ -302,7 +302,9 @@ class GitRev:
                                                         stdout=asyncio.subprocess.PIPE)
         git_output, git_stderr = await git_proc.communicate()
         if git_stderr:
-            logger.error(f"Unexpected error output from git ls-remote: {git_stderr}")
+            raise DownloadError(f"Unexpected error output from git ls-remote: {git_stderr}")
+        if not git_output:
+            raise DownloadError(f"Distro ref {self.version} could not be found in the git remote.")
         return git_output.split()[0].decode()
 
     async def get_file(self, path):
