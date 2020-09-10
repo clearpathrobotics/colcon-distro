@@ -294,8 +294,8 @@ class GitRev:
 
     @contextlib.asynccontextmanager
     async def tempdir_download(self):
-        dirname = self.repo_path.replace('/', '-')
-        with TemporaryDirectory(suffix=dirname) as tempdir:
+        dirname = f"colcon-distro--{self.repo_path.replace('/', '-')}--"
+        with TemporaryDirectory(prefix=dirname, dir="/var/tmp") as tempdir:
             await self.downloader.download_all_to(pathlib.Path(tempdir))
             yield tempdir
 

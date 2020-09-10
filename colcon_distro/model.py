@@ -112,7 +112,7 @@ class Model:
                 descriptor.path = descriptor.path.relative_to(repo_dir)
 
         if not descriptors:
-            raise DownloadError("No packages discovered in {url}.")
+            raise ModelError(f"No packages discovered in {url}.")
 
         sorted_descriptors = sorted(descriptors, key=operator.attrgetter('name'))
         json_obj = [descriptor_output(d) for d in sorted_descriptors]

@@ -13,7 +13,7 @@ from .vendor.compress import Compress
 
 # For now, revert to the non-uv event loop, as uvloop gives weird error
 # messages around how the process management in the download module is
-# implemented.
+# implemented. See: https://github.com/MagicStack/uvloop/issues/317
 asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
 app = sanic.Sanic(__name__)
 
