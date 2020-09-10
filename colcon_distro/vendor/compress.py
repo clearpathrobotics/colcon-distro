@@ -35,7 +35,6 @@ SOFTWARE AND DOCUMENTATION, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 DAMAGE.
 '''
 
-import brotli
 import gzip
 
 DEFAULT_MIME_TYPES = frozenset([
@@ -76,17 +75,12 @@ class Compress(object):
             content_type = content_type.split(';')[0]
 
         if (content_type not in self.app.config['COMPRESS_MIMETYPES'] or
-            ('br' not in accepted and
-             'gzip' not in accepted) or
+            'gzip' not in accepted or
             not 200 <= response.status < 300 or
             (content_length is not None and
              content_length < self.app.config['COMPRESS_MIN_SIZE']) or
                 'Content-Encoding' in response.headers):
             return response
-
-        if 'br' in accepted:
-            compressed_content = self.br(response)
-            response.headers['Content-Encoding'] = 'br'
 
         elif 'gzip' in accepted:
             compressed_content = self.gz(response)
@@ -112,13 +106,5 @@ class Compress(object):
         out = gzip.compress(
             response.body,
             compresslevel=compresslevel)
-
-        return out
-
-    def br(self, response):
-        quality = self.app.config['COMPRESS_LEVEL'];
-        if quality > 9: quality = 9;
-        if quality < 1: quality = 1;
-        out = brotli.compress(response.body, quality=quality)
 
         return out
