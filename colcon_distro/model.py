@@ -31,9 +31,6 @@ class ModelInternalError(ModelError):
     """
     pass
 
-# TODO: Both methods should be futurized, so that if the same request comes in for something
-# already in progress, we don't start working on it a second time.
-
 # TODO: It would be great to support a distro that's just a directory of files or a locally-
 # modified checkout, rather than needing to be on a known git host. This may require pulling
 # some of that logic into a dedicated Distro class.
@@ -43,10 +40,36 @@ class Model:
         self.config = config
         self.db = db
         self.extensions = get_package_identification_extensions()
+        self.in_progress = {}
 
+    def remember_progress(fn):
+        """
+        This decorator memoizes the coroutines below by wrapping them in futures and storing
+        the result in a dictionary keyed to their name and arguments. The dict entry is cleared
+        as soon as the future completes because at that point the content is in the database
+        and would be retrieved from there anyway on successive calls.
+
+        The idea here is that if multiple calls for the same (or overlapping) snapshots come in
+        concurrently, we don't do the same work twice. And more importantly, we don't violate
+        uniqueness constraints in the database by inserting the same results multiple times.
+        """
+        async def wrapper(self, *args):
+            ident = (fn.__name__, *args)
+            async def _initial():
+                self.in_progress[ident] = asyncio.ensure_future(fn(self, *args))
+                try:
+                    return await self.in_progress[ident]
+                finally:
+                    del self.in_progress[ident]
+            return await (self.in_progress.get(ident) or _initial())
+        return wrapper
+
+    @remember_progress
     async def get_set(self, dist_name, name):
         """
-        Returns a list of repo state rows.
+        Returns a set of repo state rows, by fetching them from the database if possible,
+        and falling back to building it up manually if required, after which it is saved
+        in the database and returned.
         """
         # Trim the ref prefix if included.
         if name.startswith("refs/"):
@@ -92,6 +115,7 @@ class Model:
         repo_states = [repo_state_tuple[1:] for repo_state_tuple in repo_states]
         return repo_states
 
+    @remember_progress
     async def get_repo_state(self, name, typename, url, version):
         """
         Given the search terms, should always return a tuple that is an ID to a database row
