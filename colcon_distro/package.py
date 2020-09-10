@@ -24,6 +24,7 @@ def descriptor_output(d):
             depends_output[deptype] = sorted([dependency_str(dep) for dep in d.dependencies[deptype]])
     return {
         'name': d.name,
+        'path': str(d.path),
         'type': d.type,
         'depends': depends_output
     }

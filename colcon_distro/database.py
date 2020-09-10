@@ -12,7 +12,8 @@ class Database:
     FROM repo_states
     JOIN set_repo_states ON repo_states.id = set_repo_states.repo_state_id
     JOIN sets ON set_repo_states.set_id == sets.id
-    WHERE sets.dist = ? AND sets.name = ?"""
+    WHERE sets.dist = ? AND sets.name = ?
+    ORDER BY repo_states.name"""
     FETCH_REPO_STATE_QUERY = """
     SELECT id, package_descriptors
     FROM repo_states

@@ -102,8 +102,9 @@ class GitTarballDownloader:
         tar_output = []
 
         async with self.stream_repo_tarball() as tarball_stream:
-            tar_proc = await asyncio.create_subprocess_exec('tar', '--extract', '--verbose', '--gzip',
-                    cwd=path, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)
+            tar_proc = await asyncio.create_subprocess_exec('tar', '--extract', '--verbose',
+                    '--gzip', '--strip-components=1', cwd=path, stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE)
 
             async def pass_stdin():
                 async for chunk in tarball_stream.aiter_bytes():
@@ -114,7 +115,8 @@ class GitTarballDownloader:
 
             async def pass_stdout():
                 while line := await tar_proc.stdout.readline():
-                    tar_output.append(line.decode())
+                    path = line.decode().split(os.path.sep, maxsplit=1)[1]
+                    tar_output.append(path)
 
             await asyncio.wait([pass_stdin(), pass_stdout()])
         return tar_output

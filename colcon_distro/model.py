@@ -103,10 +103,16 @@ class Model:
             row_id, json_str = repo_state
             return row_id, name, typename, url, version, json.loads(json_str)
 
-        # If not, grab the source and find the package descriptors.
+        # If not, grab the source and find the package descriptors, modifying
+        # each so the path is relative to the repo rather than absolute.
         gitrev = GitRev(url, version)
         async with gitrev.tempdir_download() as repo_dir:
             descriptors = discover_packages(self._get_discovery_args(repo_dir), self.extensions)
+            for descriptor in descriptors:
+                descriptor.path = descriptor.path.relative_to(repo_dir)
+
+        if not descriptors:
+            raise DownloadError("No packages discovered in {url}.")
 
         sorted_descriptors = sorted(descriptors, key=operator.attrgetter('name'))
         json_obj = [descriptor_output(d) for d in sorted_descriptors]
