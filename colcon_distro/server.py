@@ -6,7 +6,6 @@ import sanic
 from .config import add_config_args, get_config
 from .database import Database
 from .download import GitRev
-from .generator import scan_repositories
 from .model import Model
 from .vendor.compress import Compress
 

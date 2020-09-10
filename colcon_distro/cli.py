@@ -5,7 +5,6 @@ import logging
 from .config import add_config_args, get_config
 from .database import Database
 from .download import GitRev
-from .generator import scan_repositories
 from .model import Model
 
 logger = logging.getLogger(__name__)
