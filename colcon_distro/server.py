@@ -16,14 +16,15 @@ from .vendor.compress import Compress
 asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
 app = sanic.Sanic(__name__)
 
-# We deal in single requests; there's not advantage in them staying open.
+# We deal in single requests; there's no advantage in having the client
+# hold the connection open.
 app.config.KEEP_ALIVE = False
 
 # Requests are tiny and should arrive quickly.
 app.config.REQUEST_TIMEOUT = 5
 
-# In pathological cases where nothing is cached, it can take a long time
-# to generate a response.
+# In the worst case where nothing is cached, it can take a long time
+# to generate a response; this is up from the default of 60 seconds.
 app.config.RESPONSE_TIMEOUT = 300
 
 # Compress responses with gzip or brotli as acceptable to the client.
@@ -32,15 +33,17 @@ Compress(app)
 @app.route("/get/<dist>/<ref:path>.json")
 async def get(request, dist, ref):
     repo_states = await app.model.get_set(dist, ref)
-    return sanic.response.json({
+    # Include the original request information in the response to facilitate using
+    # this result with an import workflow (not yet implemented).
+    response_obj = {
         'rosdistro': {
             'repository': app.model.config.distro.repository,
             'distribution': dist,
             'ref': ref
         },
         'cache': repo_states
-    })
-
+    }
+    return sanic.response.json(response_obj)
 
 def get_arg_parser():
     ap = argparse.ArgumentParser()
