@@ -56,6 +56,8 @@ def get_arg_parser():
 def main():
     args = get_arg_parser().parse_args()
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
+    logging.getLogger("sanic.access").propagate = False
+    logging.getLogger("sanic.root").propagate = False
 
     config = get_config(args)
     db = Database(config)

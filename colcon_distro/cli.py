@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import logging
+import uvloop
 
 from .config import add_config_args, get_config
 from .database import Database
@@ -29,6 +30,7 @@ def main():
     db = Database(config)
     model = Model(config, db)
 
+    asyncio.set_event_loop(uvloop.new_event_loop())
     result = asyncio.run(model.get_set(args.dist, args.ref))
     len_packages = sum([len(x[-1]) for x in result])
     if args.verbose:
