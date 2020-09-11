@@ -1,15 +1,17 @@
 from collections import namedtuple
 import contextlib
+import os
 from pathlib import Path
 import toml
 
 
-DistroConfig = namedtuple('DistroConfig', 'repository distributions branches')
+DistroConfig = namedtuple('DistroConfig', 'repository distributions branches python_version')
 
 
 class Config:
     DEFAULT_CONFIG_FILE="colcon-distro.toml"
     DEFAULT_DATABASE_FILE="distro.db"
+    DEFAULT_PARALLELISM=8
     DIST_INDEX_YAML_FILE="index.yaml"
 
     def __init__(self, args):
@@ -19,6 +21,7 @@ class Config:
             with open(config_file, 'r') as f:
                 self.toml = toml.load(f)
             self.distro = DistroConfig(**self.toml['distro'])
+            os.environ['ROS_PYTHON_VERSION'] = str(self.distro.python_version)
         else:
             self.toml = None
 
@@ -28,6 +31,13 @@ class Config:
         with contextlib.suppress(KeyError):
             return Path(self.toml['database']['filename'])
         return Path(self.DEFAULT_DATABASE_FILE)
+
+    def get_parallelism(self):
+        if self.toml:
+            try:
+                return self.toml['general']['parallelism']
+            except KeyError:
+                return self.DEFAULT_PARALLELISM
 
 
 def add_config_args(argparser):

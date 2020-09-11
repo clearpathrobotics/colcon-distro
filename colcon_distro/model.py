@@ -132,7 +132,7 @@ class Model:
 
         # If not, grab the source and find the package descriptors, modifying
         # each so the path is relative to the repo rather than absolute.
-        self.semaphore = self.semaphore or asyncio.Semaphore(8)
+        self.semaphore = self.semaphore or asyncio.Semaphore(self.config.get_parallelism())
         async with self.semaphore:
             gitrev = GitRev(url, version)
             async with gitrev.tempdir_download() as repo_dir:
