@@ -42,6 +42,9 @@ class Model:
         self.extensions = get_package_identification_extensions()
         self.in_progress = {}
 
+        # Limit how much work we try to do at once.
+        self.semaphore = None
+
     def remember_progress(fn):
         """
         This decorator memoizes the coroutines below by wrapping them in futures and storing
@@ -129,11 +132,13 @@ class Model:
 
         # If not, grab the source and find the package descriptors, modifying
         # each so the path is relative to the repo rather than absolute.
-        gitrev = GitRev(url, version)
-        async with gitrev.tempdir_download() as repo_dir:
-            descriptors = discover_packages(self._get_discovery_args(repo_dir), self.extensions)
-            for descriptor in descriptors:
-                descriptor.path = descriptor.path.relative_to(repo_dir)
+        self.semaphore = self.semaphore or asyncio.Semaphore(8)
+        async with self.semaphore:
+            gitrev = GitRev(url, version)
+            async with gitrev.tempdir_download() as repo_dir:
+                descriptors = discover_packages(self._get_discovery_args(repo_dir), self.extensions)
+                for descriptor in descriptors:
+                    descriptor.path = descriptor.path.relative_to(repo_dir)
 
         if not descriptors:
             raise ModelError(f"No packages discovered in {url}.")

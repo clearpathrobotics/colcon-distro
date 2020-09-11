@@ -20,40 +20,7 @@ class DownloadError(Exception):
     pass
 
 
-class CountedClient:
-    """
-    The httpx library can use connection pooling if we use a common Client object for
-    all requests. The purpose of this container is to supply that common object while still
-    ensuring that it is properly closed when all requests in a batch are complete.
-    """
-    PARALLELISM = 8
-    instance = None
-
-    def __init__(self):
-        self.sem = None
-        self.client = None
-
-    @classmethod
-    @contextlib.asynccontextmanager
-    async def get(cls):
-        if not cls.instance:
-            cls.instance = cls()
-
-        if not cls.instance.client:
-            cls.instance.client = httpx.AsyncClient()
-            cls.instance.sem = asyncio.Semaphore(cls.PARALLELISM)
-
-        async with cls.instance.sem:
-            yield cls.instance.client
-
-        # Here we peek at the semaphore's internal counter and if it's back at the
-        # original value (all uses have been released) then we shut everything down.
-        if cls.instance.sem._value == cls.PARALLELISM:
-            c = cls.instance.client
-            cls.instance.client = None
-            cls.instance.sem = None
-            await c.aclose()
-
+# TODO: Consider replacing the curl subprocess stuff with RPC calls to a aria2 daemon.
 
 class GitTarballDownloader:
     """
@@ -72,20 +39,11 @@ class GitTarballDownloader:
         Yields an httpx response object for a resource on the git server.
         """
         url = f"{self.base_url}/{url_path}"
-        async with CountedClient.get() as client:
+        async with httpx.AsyncClient() as client:
             async with client.stream('GET', url, headers=(headers or self.headers)) as response:
                 if response.status_code != 200:
                     raise DownloadError(f"HTTP {response.status_code} fetching {url}")
                 yield response
-
-    @contextlib.asynccontextmanager
-    async def stream_repo_tarball(self):
-        """
-        Yields an httpx response object for a stream of the repo's main tarball.
-        """
-        url_path = self.TARBALL_PATH.format(**self.__dict__)
-        async with self.stream_resource(url_path) as response:
-            yield response
 
     @contextlib.asynccontextmanager
     async def stream_repo_file(self, path):
@@ -98,28 +56,21 @@ class GitTarballDownloader:
             yield response
 
     async def extract_tarball_to(self, path):
-        tar_proc = None
-        tar_output = []
-
-        async with self.stream_repo_tarball() as tarball_stream:
-            tar_proc = await asyncio.create_subprocess_exec('tar', '--extract', '--verbose',
-                    '--gzip', '--strip-components=1', cwd=path, stdin=asyncio.subprocess.PIPE,
-                    stdout=asyncio.subprocess.PIPE)
-
-            async def pass_stdin():
-                async for chunk in tarball_stream.aiter_bytes():
-                    tar_proc.stdin.write(chunk)
-                    await tar_proc.stdin.drain()
-                tar_proc.stdin.close()
-                await tar_proc.wait()
-
-            async def pass_stdout():
-                while line := await tar_proc.stdout.readline():
-                    path = line.decode().split(os.path.sep, maxsplit=1)[1]
-                    tar_output.append(path)
-
-            await asyncio.wait([pass_stdin(), pass_stdout()])
-        return tar_output
+        # Originally this was an httpx download, but then the pipes had to be managed
+        # inside asyncio, which was a pain and the performance was significantly worse
+        # compared to this approach. Also, it didn't work with uvloop, which this does.
+        url_path = self.TARBALL_PATH.format(**self.__dict__)
+        header_strs = [f'-H "{k}:{v}"' for k, v in self.headers.items()]
+        curl_cmd = f'curl -L {" ".join(header_strs)} {self.base_url}/{url_path}'
+        tar_cmd = 'tar --extract --verbose --gzip --strip-components=1'
+        tar_proc = await asyncio.create_subprocess_shell(
+                f"{curl_cmd} | {tar_cmd}", cwd=path,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        tar_stdout, tar_stderr = await tar_proc.communicate()
+        if tar_proc.returncode != 0:
+            raise DownloadError("Archive download failed.")
+        filelist = [l.decode().split(os.path.sep, maxsplit=1)[1] for l in tar_stdout.splitlines()]
+        return filelist
 
     async def download_all_to(self, path):
         """
@@ -138,7 +89,6 @@ class GitTarballDownloader:
                 await self.download_all_lfs(lfs_object_dict)
                 lfs_count = len(lfs_object_dict)
                 logger.info(f"> {self.version} {self.repo_path} [{lfs_count} LFS object(s)]")
-
         # TODO: Scan for .gitmodules, and if found, recursively instantiate GitRevs for them
         # so that they also can be download_all_to'd the correct paths.
 
@@ -188,42 +138,35 @@ class GitTarballDownloader:
                "ref": {"name": self.version}
             }
 
-        def _generate_downloaders(response_objects):
-            """
-            For each object given in the LFS response, this generator yields
-            a downloader coroutine which takes care of writing it to the correct
-            location on disk and confirming the size when finished.
-            """
-            for obj in response_objects:
-                async def _downloader(obj):
-                    dl = obj['actions']['download']
-                    async with CountedClient.get() as client:
-                        stream = client.stream('GET', dl['href'], headers=dl['header'])
-                        async with stream as response:
-                            if response.status_code != 200:
-                                raise DownloadError(f"Received HTTP {response.status_code} while" +
-                                                    f"fetching LFS object from {dl['href']}")
-                            lfs_filepath, lfs_size = lfs_object_dict[obj['oid']]
-                            with open(lfs_filepath, 'wb') as lfs_file:
-                                async for chunk in response.aiter_bytes():
-                                    lfs_file.write(chunk)
-                                if not lfs_file.tell() != lfs_size:
-                                    raise DownloadError(f"LFS object size expected {lfs_size}, actual {lfs_file.tell()}.")
-                yield _downloader(obj)
+        # Auth for the LFS server is slightly different than main GitLab.
+        auth = ('oauth2', self.headers['Private-Token'])
+        url = f'{self.base_url}/{self.repo_path}.git/info/lfs/objects/batch'
 
-        async with CountedClient.get() as client:
-            # Auth for the LFS server is slightly different than main GitLab.
-            auth = ('oauth2', self.headers['Private-Token'])
-            url = f'{self.base_url}/{self.repo_path}.git/info/lfs/objects/batch'
-
-            # This is where we scan for objects in the repo which must be downloaded
-            # from LFS, and sent off a list of them to the server.
-            request_json = _get_lfs_request(lfs_object_dict)
+        # This is where we scan for objects in the repo which must be downloaded
+        # from LFS, and sent off a list of them to the server.
+        request_json = _get_lfs_request(lfs_object_dict)
+        async with httpx.AsyncClient() as client:
             response = await client.post(url, auth=auth, json=request_json)
 
-        if response.status_code != 200:
-            raise DownloadError("Got {response.status_code} accessing {url} for LFS objects.")
-        await asyncio.gather(*_generate_downloaders(response.json()['objects']))
+        # Now we have the URLs and auth codes, build up a cURL request to grab
+        # them all.
+        curl_config = []
+        lfs_objs = response.json()['objects']
+        for k, v in lfs_objs[0]['actions']['download']['header'].items():
+            curl_config.append(f"header = \"{k}: {v}\"")
+        for obj in lfs_objs:
+            lfs_filepath, lfs_size = lfs_object_dict[obj['oid']]
+            dl = obj['actions']['download']
+            curl_config.append(f"output = {lfs_filepath}")
+            curl_config.append(f"url = {dl['href']}")
+
+        curl_proc = await asyncio.create_subprocess_exec('curl', '-K', '-',
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE)
+        curl_stdout, curl_stderr = await curl_proc.communicate('\n'.join(curl_config).encode())
+        if curl_proc.returncode != 0:
+            raise DownloadError("LFS download failed.")
 
 
 def _find_files_in_list(path, file_list, name):
@@ -231,7 +174,6 @@ def _find_files_in_list(path, file_list, name):
     Scans a list of files (eg, from tar output) looking for instances
     of a specific filename.
     """
-    name += '\n'
     for line in file_list:
         if line.endswith(name):
             yield path / line.strip()
