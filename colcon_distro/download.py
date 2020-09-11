@@ -34,13 +34,13 @@ class GitTarballDownloader:
         self.repo_path_quoted = urllib.parse.quote(self.repo_path, safe='')
 
     @contextlib.asynccontextmanager
-    async def stream_resource(self, url_path, headers=None):
+    async def stream_resource(self, url_path):
         """
         Yields an httpx response object for a resource on the git server.
         """
         url = f"{self.base_url}/{url_path}"
         async with httpx.AsyncClient() as client:
-            async with client.stream('GET', url, headers=(headers or self.headers)) as response:
+            async with client.stream('GET', url, headers=self.headers) as response:
                 if response.status_code != 200:
                     raise DownloadError(f"HTTP {response.status_code} fetching {url}")
                 yield response
@@ -103,25 +103,24 @@ class GitTarballDownloader:
         """
         for attributes_filepath in git_attributes_filepaths:
             for lfs_filepath in _find_files_from_git_attributes(attributes_filepath):
+                # The lfs_filepath is absolute, since it comes assembled to the
+                # absolute path of the gitattributes file which identified it.
                 with open(lfs_filepath, 'r') as f:
                     if f.readline() != 'version https://git-lfs.github.com/spec/v1\n':
                         return
                     match = re.match("oid sha256:([0-9a-f]+)\nsize ([0-9]+)", f.read(), re.MULTILINE)
                     if not match:
                         raise DownloadError(f"Unable to parse LFS information for {filepath}")
-                    lfs_sha, lfs_size = match.groups()
+                    lfs_sha = match.group(1)
+                    lfs_size = int(match.group(2))
                     yield lfs_sha, (lfs_filepath, lfs_size)
 
     async def download_all_lfs(self, lfs_object_dict):
         """
-        This isn't as bad as it looks. Bascially git-lfs puts marker files in the actual
-        repo, and those markers contain a hash which may be used to get an actual download
-        link and authorization code from a separate Git LFS server. Note that this may be
-        batched, so we only make a single request which gets us all LFS download links in
-        a single go.
-
-        The overall flow is top-to-bottom in this outer function; see the individual pieces
-        for further details.
+        Git LFS puts marker files in the actual repo, and those markers contain a hash
+        which may be used to get an actual download link and authorization code from a
+        separate Git LFS server. Since this may be batched, we only make a single request
+        which gets us all LFS download links in a single go.
         """
         def _get_lfs_request(lfs_object_dict):
             """
@@ -167,6 +166,13 @@ class GitTarballDownloader:
         curl_stdout, curl_stderr = await curl_proc.communicate('\n'.join(curl_config).encode())
         if curl_proc.returncode != 0:
             raise DownloadError("LFS download failed.")
+
+        for obj in lfs_objs:
+            lfs_filepath, lfs_size = lfs_object_dict[obj['oid']]
+            actual_size = lfs_filepath.stat().st_size
+            if actual_size != lfs_size:
+                msg = f"LFS file {lfs_filepath} expected size {lfs_size}, actual {actual_size}."
+                raise DownloadError(msg)
 
 
 def _find_files_in_list(path, file_list, name):
