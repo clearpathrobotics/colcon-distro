@@ -39,7 +39,10 @@ async def get(request, dist, ref):
         },
         'cache': repo_states
     }
-    return sanic.response.json(response_obj)
+    headers = {
+        'Content-Disposition': f'inline; name={ref.replace("/", "-")}.json'
+    }
+    return sanic.response.json(response_obj, headers=headers)
 
 def get_arg_parser():
     ap = argparse.ArgumentParser()
