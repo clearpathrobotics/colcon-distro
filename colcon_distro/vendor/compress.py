@@ -40,6 +40,7 @@ import gzip
 DEFAULT_MIME_TYPES = frozenset([
     'text/html', 'text/css', 'text/xml',
     'application/json',
+    'application/yaml',
     'application/javascript'])
 
 

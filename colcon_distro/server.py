@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import logging
 import sanic
+import yaml
 
 from .config import add_config_args, get_config
 from .database import Database
@@ -26,23 +27,46 @@ app.config.RESPONSE_TIMEOUT = 300
 # Compress responses with gzip or brotli as acceptable to the client.
 Compress(app)
 
-@app.route("/get/<dist>/<ref:path>.json")
-async def get(request, dist, ref):
-    repo_states = await app.model.get_set(dist, ref)
+async def get_response_obj(dist, ref):
+    repo_states_list = await app.model.get_set(dist, ref)
+    def repo_states_items():
+        for name, typename, url, version, packages in repo_states_list:
+            repo_obj = {
+                'type': typename,
+                'url': url,
+                'version': version,
+                'packages': packages
+            }
+            yield name, repo_obj
     # Include the original request information in the response to facilitate using
     # this result with an import workflow (not yet implemented).
-    response_obj = {
+    return {
         'rosdistro': {
             'repository': app.model.config.distro.repository,
             'distribution': dist,
             'ref': ref
         },
-        'cache': repo_states
+        'repositories': dict(repo_states_items())
     }
+
+@app.route("/get/<dist>/<ref:path>.yaml")
+async def get_yaml(request, dist, ref):
+    headers = {
+        'Content-Disposition': f'attachment; filename={ref.replace("/", "-")}.yaml'
+    }
+    ro = await get_response_obj(dist, ref)
+    return sanic.response.raw(
+        yaml.dump(ro, sort_keys=False, encoding='utf-8'),
+        headers=headers,
+        content_type='application/yaml')
+
+@app.route("/get/<dist>/<ref:path>.json")
+async def get_json(request, dist, ref):
     headers = {
         'Content-Disposition': f'inline; name={ref.replace("/", "-")}.json'
     }
-    return sanic.response.json(response_obj, headers=headers)
+    ro = await get_response_obj(dist, ref)
+    return sanic.response.json(ro, headers=headers)
 
 def get_arg_parser():
     ap = argparse.ArgumentParser()
