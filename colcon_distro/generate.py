@@ -82,7 +82,7 @@ class GenerateVerb(VerbExtensionPoint):
             help='Location to find the colcon-distro cache server.')
         parser.add_argument('--ref', default=None,
             help='Ref to search on the colcon-distro cache server.')
-        parser.add_argument('--repos-file', '-o', default='.repos',
+        parser.add_argument('--repos-file', '-r', default='.repos',
             help='Filename to save result to.')
         parser.add_argument('--deps-file', '-d', default='.deps',
             help='Filename to save list of outstanding dependencies to.')

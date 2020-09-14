@@ -1,3 +1,12 @@
+from colcon_core.task import TaskContext
+from colcon_core.verb import VerbExtensionPoint
+from colcon_core.event_handler import add_event_handler_arguments
+from colcon_core.executor import add_executor_arguments
+from colcon_core.executor import execute_jobs
+from colcon_core.executor import Job
+from colcon_core.executor import OnError
+import yaml
+
 import asyncio
 import contextlib
 import httpx
@@ -11,6 +20,55 @@ import urllib.parse
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+
+class DownloadVerb(VerbExtensionPoint):
+    class Task:
+        def set_context(self, context):
+            self.context = context
+
+        async def __call__(self):
+            spec = self.context.repo_spec
+            path = self.context.src_path / self.context.repo_name
+            path.mkdir(parents=True, exist_ok=True)
+            gitrev = GitRev(spec['url'], spec['version'])
+            await gitrev.downloader.download_all_to(path)
+
+    def __init__(self):  # noqa: D107
+        super().__init__()
+
+    def add_arguments(self, *, parser):  # noqa: D102
+        parser.add_argument('--repos-file', '-r', default='.repos',
+            help='Filename to save result to.')
+        parser.add_argument('--src-base', '-s', default='src',
+            help='Path to unpack repo tarballs to.')
+        add_executor_arguments(parser)
+        add_event_handler_arguments(parser)
+
+    def main(self, *, context):  # noqa: D102
+        src_path = pathlib.Path(os.path.abspath(context.args.src_base))
+
+        with open(context.args.repos_file) as f:
+            repo_specs = yaml.safe_load(f)['repositories']
+
+        class Dummy:
+            def __init__(self, name):
+                self.name = name
+
+        jobs = {}
+        for repo_name, repo_spec in repo_specs.items():
+            task_context = TaskContext(args=context.args, pkg=Dummy(repo_name), dependencies=set())
+            task_context.repo_name = repo_name
+            task_context.repo_spec = repo_spec
+            task_context.src_path = src_path
+
+            job = Job(
+                identifier=repo_name,
+                dependencies=[],
+                task=self.Task(), task_context=task_context)
+            jobs[repo_name] = job
+        rc = execute_jobs(context, jobs, on_error=OnError.interrupt)
+        return rc
 
 
 class DownloadError(Exception):
