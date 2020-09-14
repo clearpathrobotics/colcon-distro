@@ -1,5 +1,6 @@
 
 from colcon_core.dependency_descriptor import DependencyDescriptor
+from colcon_core.package_descriptor import PackageDescriptor
 
 
 # TODO: This should be reworked as some kind of intermediate representation class that can
@@ -17,7 +18,7 @@ def dependency_str(dep):
     raise ValueError("Unexpected dependency type.")
 
 
-def descriptor_output(d):
+def descriptor_to_dict(d):
     depends_output = {}
     for deptype in ('build', 'run', 'test'):
         if deptype in d.dependencies and d.dependencies[deptype]:
@@ -28,3 +29,13 @@ def descriptor_output(d):
         'type': d.type,
         'depends': depends_output
     }
+
+
+def descriptor_from_dict(obj):
+    d = PackageDescriptor(obj['path'])
+    d.name = obj['name']
+    d.type = obj['type']
+    for deptype, deplist in obj['depends'].items():
+        for depname in deplist:
+            d.dependencies[deptype].add(DependencyDescriptor(depname))
+    return d

@@ -11,7 +11,7 @@ import operator
 import yaml
 
 from .download import GitRev
-from .package import descriptor_output
+from .package import descriptor_to_dict
 
 
 logger = logging.getLogger(__name__)
@@ -144,7 +144,7 @@ class Model:
             raise ModelError(f"No packages discovered in {url}.")
 
         sorted_descriptors = sorted(descriptors, key=operator.attrgetter('name'))
-        json_obj = [descriptor_output(d) for d in sorted_descriptors]
+        json_obj = [descriptor_to_dict(d) for d in sorted_descriptors]
 
         # Insert it as a new row, and return that row's id.
         repo_state_args = (name, typename, url, version, json.dumps(json_obj))
