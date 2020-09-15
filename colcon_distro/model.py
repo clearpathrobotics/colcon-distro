@@ -92,14 +92,14 @@ class Model:
         distro_rev = GitRev(self.config.distro.repository, name)
         distro_rev.version = await distro_rev.version_hash_lookup()
         distro_rev.downloader.version = distro_rev.version
-        index_yaml_str = await distro_rev.get_file(self.config.DIST_INDEX_YAML_FILE)
+        index_yaml_str = await distro_rev.downloader.get_file(self.config.DIST_INDEX_YAML_FILE)
         index_obj = yaml.safe_load(index_yaml_str)
 
         if dist_name in index_obj['distributions']:
             dist_file_path = index_obj['distributions'][dist_name]['distribution'][0]
         else:
             raise ModelError("Unknown distro [{dist_name}] specified.")
-        distro_obj = yaml.safe_load(await distro_rev.get_file(dist_file_path))
+        distro_obj = yaml.safe_load(await distro_rev.downloader.get_file(dist_file_path))
 
         def _get_repo_states():
             """ Generate getter coroutines for all repo states. """

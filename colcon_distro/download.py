@@ -261,6 +261,9 @@ def _find_files_from_git_attributes(attributes_filepath, filter_type="lfs"):
                 git_glob = f"**/{git_glob}"
             yield from attributes_filepath.parent.glob(git_glob)
 
+    async def get_file(self, path):
+        async with self.stream_repo_file(path) as response:
+            return await response.aread()
 
 class GithubDownloader(GitTarballDownloader):
     SERVER_REGEX = re.compile(r'^github\.com')
@@ -276,27 +279,46 @@ class GitLabDownloader(GitTarballDownloader):
     headers = { 'Private-Token': os.environ.get('GITLAB_PRIVATE_TOKEN', '') }
 
 
+class GitLocalFileDownloader:
+    def __init__(self, repo_path, version):
+        self.repo_path = repo_path
+
+    async def get_file(self, path):
+        git_cmd = ['git', 'show', f'{self.version}:{path}']
+        git_proc = await asyncio.create_subprocess_exec(*git_cmd,
+                cwd=self.repo_path, stdout=asyncio.subprocess.PIPE)
+        stdout, stderr = await git_proc.communicate()
+        return stdout
+
+
 class GitRev:
     """
     This class is the main entry point of the module, supplying asynchronous methods to
     intelligently download/access the contents of a remote git repo at a specific ref.
     """
     URL_REGEX = re.compile('(?:\w+:\/\/|git@)(?P<server>[\w.-]+)[:/](?P<repo_path>[\w/-]*)(?:\.git)?$')
-    DOWNLOADERS = [GitLabDownloader, GithubDownloader]
+    URL_DOWNLOADERS = [GitLabDownloader, GithubDownloader]
+    FILE_REGEX = re.compile('file:\/\/(?P<repo_path>.+)$')
 
     def __init__(self, url, version):
-        if not (match := self.URL_REGEX.match(url)):
-            raise DownloadError(f"Unable to parse version control URL: {url}")
-        self.__dict__.update(match.groupdict())
         self.url = url
         self.version = version
-        self.downloader = self._get_downloader()
-
-    def _get_downloader(self):
-        for dl in self.DOWNLOADERS:
-            if dl.SERVER_REGEX.match(self.server):
-                return dl(server=self.server, repo_path=self.repo_path, version=self.version)
-        raise DownloadError(f"Unable to find downloader for URL: {url}")
+        if match := self.URL_REGEX.match(url):
+            # Recognized remote hosts (Github, GitLab)
+            self.__dict__.update(match.groupdict())
+            for dl_cls in self.URL_DOWNLOADERS:
+                if dl_cls.SERVER_REGEX.match(self.server):
+                    self.downloader = dl_cls(server=self.server,
+                                             repo_path=self.repo_path,
+                                             version=self.version)
+                    break
+        elif match := self.FILE_REGEX.match(url):
+            # Repo on the local filesystem
+            self.__dict__.update(match.groupdict())
+            self.downloader = GitLocalFileDownloader(repo_path=self.repo_path,
+                                                     version=version)
+        else:
+            raise DownloadError(f"Unable to download from {url}")
 
     @contextlib.asynccontextmanager
     async def tempdir_download(self):
@@ -314,7 +336,3 @@ class GitRev:
         if not git_output:
             raise DownloadError(f"Distro ref {self.version} could not be found in the git remote.")
         return git_output.split()[0].decode()
-
-    async def get_file(self, path):
-        async with self.downloader.stream_repo_file(path) as response:
-            return await response.aread()
