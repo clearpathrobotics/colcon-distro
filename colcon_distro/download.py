@@ -163,13 +163,13 @@ class GitTarballDownloader:
             for lfs_filepath in _find_files_from_git_attributes(attributes_filepath):
                 # The lfs_filepath is absolute, since it comes assembled to the
                 # absolute path of the gitattributes file which identified it.
-                with open(lfs_filepath, 'r') as f:
-                    if f.readline() != 'version https://git-lfs.github.com/spec/v1\n':
+                with open(lfs_filepath, 'rb') as f:
+                    if f.readline() != b'version https://git-lfs.github.com/spec/v1\n':
                         return
-                    match = re.match("oid sha256:([0-9a-f]+)\nsize ([0-9]+)", f.read(), re.MULTILINE)
+                    match = re.match(b"oid sha256:([0-9a-f]+)\nsize ([0-9]+)", f.read(), re.MULTILINE)
                     if not match:
                         raise DownloadError(f"Unable to parse LFS information for {filepath}")
-                    lfs_sha = match.group(1)
+                    lfs_sha = match.group(1).decode()
                     lfs_size = int(match.group(2))
                     yield lfs_sha, (lfs_filepath, lfs_size)
 
@@ -232,6 +232,10 @@ class GitTarballDownloader:
                 msg = f"LFS file {lfs_filepath} expected size {lfs_size}, actual {actual_size}."
                 raise DownloadError(msg)
 
+    async def get_file(self, path):
+        async with self.stream_repo_file(path) as response:
+            return await response.aread()
+
 
 def _find_files_in_list(path, file_list, name):
     """
@@ -260,10 +264,6 @@ def _find_files_from_git_attributes(attributes_filepath, filter_type="lfs"):
             if os.path.sep not in git_glob:
                 git_glob = f"**/{git_glob}"
             yield from attributes_filepath.parent.glob(git_glob)
-
-    async def get_file(self, path):
-        async with self.stream_repo_file(path) as response:
-            return await response.aread()
 
 class GithubDownloader(GitTarballDownloader):
     SERVER_REGEX = re.compile(r'^github\.com')

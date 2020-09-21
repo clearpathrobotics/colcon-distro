@@ -1,6 +1,6 @@
 *.db
 *.egg-info
 *.sql
-*.swp
+*.sw[op]
 *.toml
 __pycache__
