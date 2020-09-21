@@ -7,7 +7,7 @@ from colcon_distro.model import Model
 import asyncio
 from pathlib import Path
 from shutil import copytree
-from subprocess import check_call
+from subprocess import check_output
 from tempfile import TemporaryDirectory
 
 
@@ -17,7 +17,7 @@ class DummyConfig(Config):
         self.dir = config_dir
         self.distro_dir = self.dir / 'distro'
         self.distro_dir.mkdir()
-        check_call(['git', 'init'], cwd=self.distro_dir)
+        self._git('init')
         self.distro = DistroConfig(
             repository='file://' + str(self.distro_dir),
             distributions=['banana'],
@@ -27,12 +27,16 @@ class DummyConfig(Config):
     def add_state(self, state_name):
         state_dir = Path(__file__).parent / 'distro_states' / state_name
         copytree(state_dir, self.distro_dir, dirs_exist_ok=True)
-        check_call(['git', 'add', '.'], cwd=self.distro_dir)
-        check_call(['git', 'commit', '-m', state_name], cwd=self.distro_dir)
-        check_call(['git', 'tag', state_name], cwd=self.distro_dir)
+        self._git('add', '.')
+        self._git('commit', '-m', state_name)
+        self._git('tag', state_name)
 
     def get_database_filepath(self):
         return self.dir / 'distro.db'
+
+    def _git(self, *cmds):
+        output = check_output(('git',) + cmds, cwd=self.distro_dir, universal_newlines=True)
+        print(output)
 
 
 def test_model_github_hashes():
