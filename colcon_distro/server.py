@@ -86,4 +86,16 @@ def main():
     config = get_config(args)
     db = Database(config)
     app.model = Model(config, db)
-    app.run(host=args.host, port=args.port)
+
+    async def run_server():
+        server = await app.create_server(
+            host=args.host,
+            port=args.port,
+            return_asyncio_server=True
+        )
+        return await server.serve_forever()
+
+    try:
+        asyncio.run(run_server())
+    except KeyboardInterrupt:
+        pass

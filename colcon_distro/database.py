@@ -105,21 +105,16 @@ class Database:
 class Connection:
     """
     This manager class provides a few important capabilities to our sqlite connection.
-    First, it mutexes it, so that commit() from one coroutine don't get interleaved with
+    First, it mutexes it, so that commits from one coroutine don't get interleaved with
     queries from another, since sqlite has no built in concept of there being multiple
-    clients or concurrent transactions going on. Second, it provides a timeout which
-    ensures we always close the database file after a brief period of inactivity, since
-    the server process doesn't end cleanly if the database connection is left open, and
-    this is nicer than closing and reopening it between every operation.
+    clients or concurrent transactions going on. Second, it starts a background task
+    which on cancelation closes the connection.
     """
-    CONNECTION_TIMEOUT=1.0
-
     def __init__(self, filepath, connect_fn=None):
         # Lazy-initialize all async stuff so we don't get the wrong loop if this
         # object is constructed ahead of the loop starting.
         self._handle = None
         self._lock = None
-        self._timeout_task = None
         self._filepath = filepath
         self._connect_fn = connect_fn
 
@@ -127,21 +122,20 @@ class Connection:
     async def __call__(self):
         self._lock = self._lock or asyncio.Lock()
         async with self._lock:
-            if self._timeout_task:
-                self._timeout_task.cancel()
-                self._timeout_task = None
             if not self._handle:
                 logger.info(f"Opening database at {self._filepath}.")
                 self._handle = await aiosqlite.connect(self._filepath)
                 if self._connect_fn:
                     await self._connect_fn(self._handle)
+                asyncio.create_task(self._closer())
             yield self._handle
-            self._timeout_task = asyncio.create_task(self._connection_timeout())
 
-    async def _connection_timeout(self):
-        await asyncio.sleep(self.CONNECTION_TIMEOUT)
-        async with self._lock:
-            logger.info("Closing database.")
-            await self._handle.close()
-            self._handle = None
-            self._timeout_task = None
+    async def _closer(self):
+        try:
+            while True:
+                await asyncio.sleep(60)
+        finally:
+            async with self._lock:
+                logger.info("Closing database.")
+                await self._handle.close()
+                self._handle = None
