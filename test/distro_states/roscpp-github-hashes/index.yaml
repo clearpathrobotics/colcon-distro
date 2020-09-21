@@ -1,0 +1,3 @@
+distributions:
+  banana:
+    distribution: [distribution.yaml]

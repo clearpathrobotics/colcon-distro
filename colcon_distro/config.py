@@ -37,7 +37,8 @@ class Config:
             try:
                 return self.toml['general']['parallelism']
             except KeyError:
-                return self.DEFAULT_PARALLELISM
+                pass
+        return self.DEFAULT_PARALLELISM
 
 
 def add_config_args(argparser):

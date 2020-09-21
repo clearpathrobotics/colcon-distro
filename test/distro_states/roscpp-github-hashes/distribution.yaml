@@ -1,0 +1,81 @@
+repositories:
+  catkin:
+    source:
+      type: git
+      url: https://github.com/ros/catkin.git
+      version: 4fe89dd8a553a74e16e14754021e6550386fe5a3
+  cmake_modules:
+    source:
+      type: git
+      url: https://github.com/ros/cmake_modules.git
+      version: 2978abe7ee4d5de64f5e11d1b2a07aab747c7b69
+  gencpp:
+    source:
+      type: git
+      url: https://github.com/ros/gencpp.git
+      version: e12443e0b6ab29f51eb361149e87e82bebfa4d93
+  genlisp:
+    source:
+      type: git
+      url: https://github.com/ros/genlisp.git
+      version: 902028d6ed302a720c4536988c92471f314066f3
+  genmsg:
+    source:
+      type: git
+      url: https://github.com/ros/genmsg.git
+      version: f9dad2f897fc9bafec038ed8a74986ba766e9e9d
+  genpy:
+    source:
+      type: git
+      url: https://github.com/ros/genpy.git
+      version: 3cc66e76075b04117976962909e7cf8912b08951
+  message_generation:
+    source:
+      type: git
+      url: https://github.com/ros/message_generation.git
+      version: bd663b74370c3b52f1d049f2dd401d820df9b33d
+  message_runtime:
+    source:
+      type: git
+      url: https://github.com/ros/message_runtime.git
+      version: a0de76d8da977cd4264910d39fecd67af1569897
+  ros:
+    source:
+      type: git
+      url: https://github.com/ros/ros.git
+      version: a78c6f815ea4b7eb88ebdc5869e8749e69d41ad2
+  ros_comm:
+    source:
+      type: git
+      url: https://github.com/ros/ros_comm.git
+      version: 060fd7653450de9c411a90a5a22188b4e06d2b90
+  ros_comm_msgs:
+    source:
+      type: git
+      url: https://github.com/ros/ros_comm_msgs.git
+      version: bfb8533fd6c6e959c71f0d2a9669baeff2dac1ad
+  ros_environment:
+    source:
+      type: git
+      url: https://github.com/ros/ros_environment.git
+      version: 5ee151c7fafb89e5c675154adf0583e4f1d2a91d
+  rosconsole:
+    source:
+      type: git
+      url: https://github.com/ros/rosconsole.git
+      version: 3505c212947224e7630f8b6f59707880d9e59fcf
+  roscpp_core:
+    source:
+      type: git
+      url: https://github.com/ros/roscpp_core.git
+      version: e8848380bc3fbf1b5a8dd11a551b38a3d55cec46
+  rospack:
+    source:
+      type: git
+      url: https://github.com/ros/rospack.git
+      version: 5e3873389d988e58c889014cfb412ab5e228b983
+  std_msgs:
+    source:
+      type: git
+      url: https://github.com/ros/std_msgs.git
+      version: a17abc417cde4643ff3b229d1f2a72ca860d0833
