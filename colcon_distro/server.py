@@ -27,17 +27,17 @@ app.config.RESPONSE_TIMEOUT = 300
 # Compress responses with gzip or brotli as acceptable to the client.
 Compress(app)
 
-async def get_response_obj(dist, ref):
-    repo_states_list = await app.model.get_set(dist, ref)
+async def get_response_dict(model, dist, ref):
+    repo_states_list = await model.get_set(dist, ref)
     def repo_states_items():
         for name, typename, url, version, packages in repo_states_list:
-            repo_obj = {
+            repo_dict = {
                 'type': typename,
                 'url': url,
                 'version': version,
                 'packages': packages
             }
-            yield name, repo_obj
+            yield name, repo_dict
     # Include the original request information in the response to facilitate using
     # this result with an import workflow (not yet implemented).
     return {
@@ -54,7 +54,7 @@ async def get_yaml(request, dist, ref):
     headers = {
         'Content-Disposition': f'attachment; filename={ref.replace("/", "-")}.yaml'
     }
-    ro = await get_response_obj(dist, ref)
+    ro = await get_response_dict(app.model, dist, ref)
     return sanic.response.raw(
         yaml.dump(ro, sort_keys=False, encoding='utf-8'),
         headers=headers,
@@ -65,7 +65,7 @@ async def get_json(request, dist, ref):
     headers = {
         'Content-Disposition': f'inline; name={ref.replace("/", "-")}.json'
     }
-    ro = await get_response_obj(dist, ref)
+    ro = await get_response_dict(app.model, dist, ref)
     return sanic.response.json(ro, headers=headers)
 
 def get_arg_parser():
