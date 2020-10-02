@@ -1,14 +1,17 @@
 
-
 from colcon_distro.config import Config, DistroConfig
 from colcon_distro.database import Database
 from colcon_distro.model import Model
 
 import asyncio
+import logging
 from pathlib import Path
 from shutil import copytree
 from subprocess import check_output
 from tempfile import TemporaryDirectory
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 class DummyConfig(Config):
@@ -18,6 +21,8 @@ class DummyConfig(Config):
         self.distro_dir = self.dir / 'distro'
         self.distro_dir.mkdir()
         self._git('init')
+        self._git('config', 'user.email', 'dummy@example.com')
+        self._git('config', 'user.name', 'Dummy')
         self.distro = DistroConfig(
             repository='file://' + str(self.distro_dir),
             distributions=['banana'],
@@ -32,11 +37,15 @@ class DummyConfig(Config):
         self._git('tag', state_name)
 
     def get_database_filepath(self):
+        return Path("/tmp/distro.db")
         return self.dir / 'distro.db'
 
     def _git(self, *cmds):
-        output = check_output(('git',) + cmds, cwd=self.distro_dir, universal_newlines=True)
-        print(output)
+        cmd = ('git',) + cmds
+        logger.info('Invoking: %s', ' '.join(cmd))
+        output = check_output(('git',) + cmds, cwd=self.distro_dir, universal_newlines=True).strip()
+        if output:
+            logger.info('Response: %s', output)
 
 
 def test_model_github_hashes():
@@ -53,5 +62,6 @@ def test_model_github_hashes():
 
         # This one will return from the database, so we want to confirm that it's an
         # identical result to the above.
+        # TODO: Somehow confirm that it doesn't re-fetch anything. Check logging maybe?
         repo_set_second = asyncio.run(model.get_set('banana', 'roscpp-github-hashes'))
         assert repo_set_initial == repo_set_second
