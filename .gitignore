@@ -4,3 +4,4 @@
 *.sw[op]
 *.toml
 __pycache__
+.coverage

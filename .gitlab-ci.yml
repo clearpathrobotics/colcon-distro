@@ -1,0 +1,21 @@
+image: prod-vm-docker-registry-01.clearpath.ai/build/jenkins_slave_focal
+stages:
+- test
+
+before_script:
+  - python3 -m venv /tmp/venv
+  - /tmp/venv/bin/pip install -U coverage nose setuptools wheel
+  - /tmp/venv/bin/pip install -U .
+
+nosetests:
+  stage: test
+  script:
+  - /tmp/venv/bin/coverage run --source colcon_distro -m nose test
+  - /tmp/venv/bin/coverage report
+  - /tmp/venv/bin/coverage html
+  artifacts:
+    paths:
+    - htmlcov/
+    expire_in: 1 week
+  coverage: /^TOTAL.*\s+(\d+\%)$/
+  tags: [registry]
