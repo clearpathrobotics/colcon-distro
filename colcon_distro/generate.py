@@ -1,3 +1,4 @@
+from colcon_core.logging import colcon_logger
 from colcon_core.verb import VerbExtensionPoint
 
 from collections import defaultdict
@@ -73,6 +74,7 @@ class Generator:
 
 class GenerateVerb(VerbExtensionPoint):
     def __init__(self):  # noqa: D107
+        self.logger = colcon_logger.getChild(__name__)
         super().__init__()
 
     def add_arguments(self, *, parser):  # noqa: D102
@@ -93,6 +95,10 @@ class GenerateVerb(VerbExtensionPoint):
 
     def main(self, *, context):  # noqa: D102
         args = context.args
+        if not args.colcon_cache:
+            self.logger.error("COLCON_CACHE_URL must be set or --colcon-cache argument passed.")
+            return 1
+
         generator = Generator.from_url_cache(args.colcon_cache, args.rosdistro, args.ref)
         descriptors = generator.descriptor_set(*args.pkgs, deps=args.deps)
 
