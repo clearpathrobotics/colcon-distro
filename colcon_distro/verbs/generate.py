@@ -17,10 +17,8 @@ class GenerateVerb(VerbExtensionPoint):
             help='Location to find the colcon-distro cache server.')
         parser.add_argument('--ref', default=None,
             help='Ref to search on the colcon-distro cache server.')
-        parser.add_argument('--repos-file', '-r', default='.repos',
+        parser.add_argument('--output-file', '-o', default='.workspace',
             help='Filename to save result to.')
-        parser.add_argument('--deps-file', '-d', default='.deps',
-            help='Filename to save list of outstanding dependencies to.')
         parser.add_argument('--deps', action='store_true', default=False,
             help='Include recursive deps of the specified packages.')
         parser.add_argument('pkgs', nargs='+',
@@ -37,13 +35,10 @@ class GenerateVerb(VerbExtensionPoint):
         generator = Generator.from_url_cache(args.colcon_cache, args.rosdistro, args.ref)
         descriptors = generator.descriptor_set(*args.pkgs, deps=args.deps)
 
-        spec_dict = generator.repo_spec_from_descriptors(descriptors)
-        with open(context.args.repos_file, 'w') as f:
-            f.write(yaml.dump({'repositories': spec_dict}))
-
-        outstanding_deps = generator.outstanding_dependencies(descriptors)
-        with open(context.args.deps_file, 'w') as f:
-            for dep in sorted(outstanding_deps):
-                f.write(f'{dep.name}\n')
-
+        output_dict = {
+            'repositories': generator.repositories_spec_from_descriptors(descriptors),
+            'dependencies': sorted(generator.dependencies_from_descriptors(descriptors))
+        }
+        with open(context.args.output_file, 'w') as f:
+            f.write(yaml.dump(output_dict, sort_keys=False))
         return 0

@@ -38,31 +38,31 @@ class Generator:
             packages |= deps_packages
         return packages
 
-    def repo_spec_from_descriptors(self, descriptors):
-        # Build up a dict which maps each repo name to a dict of a the packages to their
-        # paths within the repo (info from the descriptor metadata).
-        repo_package_paths = defaultdict(dict)
+    def repositories_spec_from_descriptors(self, descriptors):
+        repo_packages = defaultdict(dict)
         for package in descriptors:
-            repo_package_paths[package.metadata['repo_name']][package.name] = str(package.path)
+            repo_packages[package.metadata['repo_name']][package.name] = {
+                'path': str(package.path),
+                'type': package.type
+            }
 
-        # This dict becomes the final generated yaml.
-        return_dict = {}
-        for repo_name, package_paths in repo_package_paths.items():
+        repositories_dict = {}
+        for repo_name in sorted(repo_packages):
             cache_repo = self.repositories[repo_name]
-            return_dict[repo_name] = {
+            repositories_dict[repo_name] = {
                 'url': cache_repo['url'],
                 'type': cache_repo['type'],
                 'version': cache_repo['version'],
-                'package_paths': package_paths
+                'packages': repo_packages[repo_name]
             }
-        return return_dict
+        return repositories_dict
 
-    def outstanding_dependencies(self, descriptors):
+    def dependencies_from_descriptors(self, descriptors):
         deps = set()
         descriptor_names = set([desc.name for desc in descriptors])
         for descriptor in descriptors:
             for deptype, depset in descriptor.dependencies.items():
                 for dep in depset:
                     if dep.name not in descriptor_names:
-                        deps.add(dep)
+                        deps.add(dep.name)
         return deps

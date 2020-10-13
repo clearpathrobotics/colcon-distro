@@ -55,7 +55,7 @@ class GitTarballDownloader:
         async with self.stream_resource(url_path) as response:
             yield response
 
-    async def extract_tarball_to(self, path):
+    async def extract_tarball_to(self, path, limit_paths=None):
         # Originally this was an httpx download, but then the pipes had to be managed
         # inside asyncio, which was a pain and the performance was significantly worse
         # compared to this approach. Also, it didn't work with uvloop, which this does.
@@ -63,6 +63,8 @@ class GitTarballDownloader:
         header_strs = [f'-H "{k}:{v}"' for k, v in self.headers.items()]
         curl_cmd = f'curl -L {" ".join(header_strs)} {self.base_url}/{url_path}'
         tar_cmd = 'tar --extract --verbose --gzip --strip-components=1'
+        if limit_paths and '.' not in limit_paths:
+            tar_cmd = ' '.join([tar_cmd, "--wildcards", "--no-wildcards-match-slash"] + ["*/%s" % p for p in limit_paths])
         tar_proc = await asyncio.create_subprocess_shell(
                 f"{curl_cmd} | {tar_cmd}", cwd=path,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
@@ -72,13 +74,13 @@ class GitTarballDownloader:
         filelist = [l.decode().split(os.path.sep, maxsplit=1)[1] for l in tar_stdout.splitlines()]
         return filelist
 
-    async def download_all_to(self, path):
+    async def download_all_to(self, path, limit_paths=None):
         """
         Unlike the plain tarball downloader, this also unpacks the result, and can
         therefore do extra stuff like fetch submodules and LFS objects.
         """
         # Download and extract the main repo archive.
-        tar_output = await self.extract_tarball_to(path)
+        tar_output = await self.extract_tarball_to(path, limit_paths)
         logger.info(f"> {self.version} {self.repo_path} [archive]")
 
         # Scan the list of extracted files for .gitattributes which may signal the presence
