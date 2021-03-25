@@ -3,6 +3,7 @@ stages:
 - test
 
 before_script:
+  - apt install python3-pip python3-wheel
   - python3 -m venv /tmp/venv
   - /tmp/venv/bin/pip install -U coverage nose setuptools wheel
   - /tmp/venv/bin/pip install -U .
@@ -18,4 +19,9 @@ nosetests:
     - htmlcov/
     expire_in: 1 week
   coverage: /^TOTAL.*\s+(\d+\%)$/
-  tags: [registry]
+
+deploy:
+   only:
+     - tags
+   script:
+     - python3 setup.py sdist bdist_wheel upload -r local
