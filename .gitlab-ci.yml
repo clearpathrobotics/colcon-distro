@@ -3,7 +3,7 @@ stages:
 - test
 
 before_script:
-  - apt install python3-pip python3-wheel
+  - apt-get install python3-pip python3-wheel
   - python3 -m venv /tmp/venv
   - /tmp/venv/bin/pip install -U coverage nose setuptools wheel
   - /tmp/venv/bin/pip install -U .
@@ -13,12 +13,11 @@ nosetests:
   script:
   - /tmp/venv/bin/coverage run --source colcon_distro -m nose test
   - /tmp/venv/bin/coverage report
-  - /tmp/venv/bin/coverage html
+  - /tmp/venv/bin/coverage xml
   artifacts:
-    paths:
-    - htmlcov/
+    reports:
+      cobertura: coverage.xml
     expire_in: 1 week
-  coverage: /^TOTAL.*\s+(\d+\%)$/
 
 deploy:
    only:
