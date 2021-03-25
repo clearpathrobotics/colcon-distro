@@ -4,8 +4,10 @@ PRAGMA foreign_keys = ON;
 Each row corresponds to a repository at a particular moment in time, identified
 by the version field, which should be a hash or tag name in the git case. If
 we end up supporting zipballs, wheels, or other direct-download assets, then
-the version would be an identifying string would could be templated into the
-URL.
+the version would be an identifying string which could be templated into the
+URL. A heuristic may be used to guess that a ref is a hash or tag, with
+ambiguous cases being checked against the git ls-remote output (or equivalent
+API native to the repo host).
 
 The descriptors is a JSON array of PackageDescriptor object serializations,
 including metadata which may have been added by package augmentation plugins.
@@ -36,8 +38,10 @@ immutable point such as a tag or snapshot of frozen/tagged versions, then the
 last_updated field should be NULL to indicate that no updates are necessary.
 
 If the name is a branch and contains unfrozen versions, the last_updated field
-should the time that it was last validated, and the corresponding repo_states rows
-should still be hashes, not branch names.
+should contain the time that it was last checked/updated, and the corresponding
+repo_states rows should still be hashes, not branch names. Note that this does
+mean branch names are not stored at all, but this does not matter, since a new
+copy of the distribution.yaml would need to be fetched anyway.
 */
 CREATE TABLE sets (
     id INTEGER PRIMARY KEY,
