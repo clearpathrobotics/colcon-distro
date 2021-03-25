@@ -23,7 +23,7 @@ class Config:
             self.distro = DistroConfig(**self.toml['distro'])
             os.environ['ROS_PYTHON_VERSION'] = str(self.distro.python_version)
         else:
-            self.toml = None
+            self.toml = {}
 
     def get_database_filepath(self):
         if self.args.database_file:

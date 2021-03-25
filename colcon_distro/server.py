@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import logging
+import re
 import sanic
 import yaml
 
@@ -42,31 +43,41 @@ async def get_response_dict(model, dist, ref):
     # this result with an import workflow (not yet implemented).
     return {
         'rosdistro': {
-            'repository': app.model.config.distro.repository,
+            'repository': app.ctx.model.config.distro.repository,
             'distribution': dist,
             'ref': ref
         },
         'repositories': dict(repo_states_items())
     }
 
-@app.route("/get/<dist>/<ref:path>.yaml")
-async def get_yaml(request, dist, ref):
+@app.route("/get/<dist:string>/<path:path>")
+async def get_ref(request, dist: str, path: str):
+    if m := re.match(r"^(.*)\.(yaml|json)", path):
+        ref, requested_format = m.groups()
+        response_dict = await get_response_dict(app.ctx.model, dist, ref)
+        response_filename = path.replace("/", "-")
+        return response_fns[requested_format](response_filename, response_dict)
+    raise sanic.exceptions.NotFound(f"Could not find {path}")
+
+def yaml_response(filename: str, response: dict):
     headers = {
-        'Content-Disposition': f'attachment; filename={ref.replace("/", "-")}.yaml'
+        'Content-Disposition': f'attachment; filename={filename}'
     }
-    ro = await get_response_dict(app.model, dist, ref)
     return sanic.response.raw(
-        yaml.dump(ro, sort_keys=False, encoding='utf-8'),
+        yaml.dump(response, sort_keys=False, encoding='utf-8'),
         headers=headers,
         content_type='application/yaml')
 
-@app.route("/get/<dist>/<ref:path>.json")
-async def get_json(request, dist, ref):
+def json_response(filename: str, response: dict):
     headers = {
-        'Content-Disposition': f'inline; name={ref.replace("/", "-")}.json'
+        'Content-Disposition': f'inline; name={filename}'
     }
-    ro = await get_response_dict(app.model, dist, ref)
-    return sanic.response.json(ro, headers=headers)
+    return sanic.response.json(response, headers=headers)
+
+response_fns = {
+    'yaml': yaml_response,
+    'json': json_response
+}
 
 def get_arg_parser():
     ap = argparse.ArgumentParser()
@@ -85,7 +96,7 @@ def main():
 
     config = get_config(args)
     db = Database(config)
-    app.model = Model(config, db)
+    app.ctx.model = Model(config, db)
 
     async def run_server():
         server = await app.create_server(
