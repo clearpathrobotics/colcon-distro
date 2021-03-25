@@ -5,3 +5,4 @@
 *.toml
 __pycache__
 .coverage
+public
