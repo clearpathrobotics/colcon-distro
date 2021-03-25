@@ -1,6 +1,6 @@
 image: prod-vm-docker-registry-01.clearpath.ai/build/jenkins_slave_focal
-stages:
-- test
+#stages:
+#- test
 
 before_script:
   - apt-get install python3-pip python3-wheel
