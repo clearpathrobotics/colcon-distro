@@ -4,16 +4,15 @@ stages:
 
 before_script:
   - apt-get install python3-pip python3-wheel
-  - python3 -m venv /tmp/venv
-  - /tmp/venv/bin/pip install -U coverage nose setuptools wheel
-  - /tmp/venv/bin/pip install -U .
+  - pip3 install -U coverage nose setuptools wheel
+  - pip3 install -U .
 
 nosetests:
   stage: test
   script:
-  - /tmp/venv/bin/coverage run --source colcon_distro -m nose test
-  - /tmp/venv/bin/coverage report
-  - /tmp/venv/bin/coverage xml
+  - coverage run --source colcon_distro -m nose test
+  - coverage report
+  - coverage xml
   artifacts:
     reports:
       cobertura: coverage.xml
@@ -24,3 +23,14 @@ deploy:
      - tags
    script:
      - python3 setup.py sdist bdist_wheel upload -r local
+
+pages:
+  stage: deploy
+  script:
+  - pip3 install -U sphinx
+  - sphinx-build -b html . public
+  artifacts:
+    paths:
+    - public
+  only:
+  - master
