@@ -1,33 +1,46 @@
 image: prod-vm-docker-registry-01.clearpath.ai/build/jenkins_slave_focal
 
 before_script:
-  - apt-get install python3-pip python3-wheel
-  - pip3 install -U coverage nose setuptools wheel
-  - pip3 install -U .
+  - apt-get install python3-pip
 
-test:
+nosetests:
+  stage: test
   script:
+  - pip3 install -U coverage nose .
   - coverage run --source colcon_distro -m nose test
   - coverage report
   - coverage xml
   artifacts:
     reports:
       cobertura: coverage.xml
-    expire_in: 1 week
 
-deploy:
-   only:
-     - tags
-   script:
-     - python3 setup.py sdist bdist_wheel upload -r local
+sphinx-docs:
+  stage: test
+  script:
+  - pip3 install -U sphinx .
+  - sphinx-build -b html docs public
+  artifacts:
+    paths: [public]
+
+setuptools-dist:
+  stage: test
+  script:
+  - pip3 install -U wheel
+  - python3 setup.py sdist bdist_wheel
+  artifacts:
+    paths: [dist]
+
+pypi:
+  stage: deploy
+  needs: [setuptools-dist]
+  only: [tags]
+  script:
+  - python3 setup.py upload -r local
 
 pages:
   stage: deploy
-  script:
-  - pip3 install -U sphinx
-  - sphinx-build -b html docs public
+  only: [master]
+  needs: [sphinx-docs]
+  script: [echo "Uploading docs"]
   artifacts:
-    paths:
-    - public
-  only:
-  - master
+    paths: [public]
