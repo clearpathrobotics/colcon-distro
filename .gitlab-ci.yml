@@ -35,7 +35,8 @@ pypi:
   needs: [setuptools-dist]
   only: [tags]
   script:
-  - python3 setup.py upload -r local
+  - pip3 install -U twine
+  - twine upload -r local dist/*
 
 pages:
   stage: deploy
