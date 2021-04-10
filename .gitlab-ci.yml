@@ -2,9 +2,10 @@ include:
   project: sweng-infra/gitlab-ci
   file: python.yml
 
-before_script:
+nose:
+  before_script:
   - apt-get update
-  - apt-get -yq install git
+  - apt-get -yq install $(< deps.txt)
 
 flake8:
   allow_failure: true
