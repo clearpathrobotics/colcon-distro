@@ -1,47 +1,11 @@
-image: prod-vm-docker-registry-01.clearpath.ai/build/jenkins_slave_focal
+include:
+  project: sweng-infra/gitlab-ci
+  file: python.yml
 
-before_script:
-  - apt-get install python3-pip
+nose:
+  before_script:
+  - apt-get update
+  - apt-get -yq install $(< deps.txt)
 
-nosetests:
-  stage: test
-  script:
-  - pip3 install -U coverage nose .
-  - coverage run --source colcon_distro -m nose test
-  - coverage report
-  - coverage xml
-  artifacts:
-    reports:
-      cobertura: coverage.xml
-
-sphinx-docs:
-  stage: test
-  script:
-  - pip3 install -U sphinx .
-  - sphinx-build -b html docs public
-  artifacts:
-    paths: [public]
-
-setuptools-dist:
-  stage: test
-  script:
-  - pip3 install -U wheel
-  - python3 setup.py sdist bdist_wheel
-  artifacts:
-    paths: [dist]
-
-pypi:
-  stage: deploy
-  needs: [setuptools-dist]
-  only: [tags]
-  script:
-  - pip3 install -U twine
-  - twine upload -r local dist/*
-
-pages:
-  stage: deploy
-  only: [master]
-  needs: [sphinx-docs]
-  script: [echo "Uploading docs"]
-  artifacts:
-    paths: [public]
+flake8:
+  allow_failure: true
