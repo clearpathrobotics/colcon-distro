@@ -5,4 +5,6 @@
 *.toml
 __pycache__
 .coverage
+coverage.xml
+nosetests.xml
 public
