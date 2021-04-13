@@ -2,9 +2,11 @@ colcon-distro
 =============
 
 An experiment in using colcon's pluggable package discovery facility to
-replace rosdistro cache and rosinstall generator. More details on the wiki:
+replace rosdistro cache and rosinstall generator.
 
-https://wiki.clearpathrobotics.com/display/~mpurvis/Next+Generation+Rosdistro+Caching
+Docs: http://tools.gitlab-pages.clearpath.ai/colcon-distro/
+
+Wiki: https://wiki.clearpathrobotics.com/display/~mpurvis/Next+Generation+Rosdistro+Caching
 
 Example configuration:
 
