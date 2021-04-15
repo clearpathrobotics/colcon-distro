@@ -1,6 +1,7 @@
 include:
   project: sweng-infra/gitlab-ci
   file:
+    - pages.yml
     - python.yml
     - lint/flake8.yml
 
