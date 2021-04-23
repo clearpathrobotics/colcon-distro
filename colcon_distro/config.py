@@ -9,10 +9,10 @@ DistroConfig = namedtuple('DistroConfig', 'repository distributions branches pyt
 
 
 class Config:
-    DEFAULT_CONFIG_FILE="colcon-distro.toml"
-    DEFAULT_DATABASE_FILE="distro.db"
-    DEFAULT_PARALLELISM=8
-    DIST_INDEX_YAML_FILE="index.yaml"
+    DEFAULT_CONFIG_FILE = "colcon-distro.toml"
+    DEFAULT_DATABASE_FILE = "distro.db"
+    DEFAULT_PARALLELISM = 8
+    DIST_INDEX_YAML_FILE = "index.yaml"
 
     def __init__(self, args):
         self.args = args
@@ -47,6 +47,7 @@ def add_config_args(argparser):
 
 
 _config = None
+
 
 def get_config(args):
     global _config

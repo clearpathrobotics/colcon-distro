@@ -55,7 +55,7 @@ def test_model_github_hashes():
 
         database = Database(config)
         model = Model(config, database)
-        
+
         # This call will cause the repos in the distribution to be cached.
         repo_set_initial = asyncio.run(model.get_set('banana', 'roscpp-github-hashes'))
         assert len(repo_set_initial) == 16

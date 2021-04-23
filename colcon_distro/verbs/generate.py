@@ -11,17 +11,18 @@ class GenerateVerb(VerbExtensionPoint):
         super().__init__()
 
     def add_arguments(self, *, parser):  # noqa: D102
-        parser.add_argument('--rosdistro', default=os.environ.get('ROSDISTRO', None),
+        add = parser.add_argument
+        add('--rosdistro', default=os.environ.get('ROSDISTRO', None),
             help='Name of rosdistro')
-        parser.add_argument('--colcon-cache', default=os.environ.get('COLCON_CACHE_URL', None),
+        add('--colcon-cache', default=os.environ.get('COLCON_CACHE_URL', None),
             help='Location to find the colcon-distro cache server.')
-        parser.add_argument('--ref', default=None,
+        add('--ref', default=None,
             help='Ref to search on the colcon-distro cache server.')
-        parser.add_argument('--output-file', '-o', default='.workspace',
+        add('--output-file', '-o', default='.workspace',
             help='Filename to save result to.')
-        parser.add_argument('--deps', action='store_true', default=False,
+        add('--deps', action='store_true', default=False,
             help='Include recursive deps of the specified packages.')
-        parser.add_argument('pkgs', nargs='+',
+        add('pkgs', nargs='+',
             help='List of packages to include.')
 
     def main(self, *, context):  # noqa: D102

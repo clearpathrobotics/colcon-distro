@@ -24,6 +24,7 @@ class ModelError(Exception):
     """
     pass
 
+
 class ModelInternalError(ModelError):
     """
     Exception for errors which are the result of bugs, for example database
@@ -34,6 +35,7 @@ class ModelInternalError(ModelError):
 # TODO: It would be great to support a distro that's just a directory of files or a locally-
 # modified checkout, rather than needing to be on a known git host. This may require pulling
 # some of that logic into a dedicated Distro class.
+
 
 class Model:
     def __init__(self, config, db):
@@ -56,8 +58,10 @@ class Model:
         concurrently, we don't do the same work twice. And more importantly, we don't violate
         uniqueness constraints in the database by inserting the same results multiple times.
         """
+
         async def wrapper(self, *args):
             ident = (fn.__name__, *args)
+
             async def _initial():
                 self.in_progress[ident] = asyncio.ensure_future(fn(self, *args))
                 try:

@@ -9,6 +9,3 @@ nose:
   before_script:
     - apt-get update
     - apt-get -yq install $(< deps.txt)
-
-flake8:
-  allow_failure: true

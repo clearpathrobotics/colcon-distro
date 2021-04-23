@@ -5,7 +5,6 @@ import uvloop
 
 from .config import add_config_args, get_config
 from .database import Database
-from .download import GitRev
 from .model import Model
 
 logger = logging.getLogger(__name__)
