@@ -7,7 +7,6 @@ import yaml
 
 from .config import add_config_args, get_config
 from .database import Database
-from .download import GitRev
 from .model import Model
 from .vendor.compress import Compress
 
@@ -28,8 +27,10 @@ app.config.RESPONSE_TIMEOUT = 300
 # Compress responses with gzip or brotli as acceptable to the client.
 Compress(app)
 
+
 async def get_response_dict(model, dist, ref):
     repo_states_list = await model.get_set(dist, ref)
+
     def repo_states_items():
         for name, typename, url, version, packages in repo_states_list:
             repo_dict = {
@@ -50,6 +51,7 @@ async def get_response_dict(model, dist, ref):
         'repositories': dict(repo_states_items())
     }
 
+
 @app.route("/get/<dist:string>/<path:path>")
 async def get_ref(request, dist: str, path: str):
     if m := re.match(r"^(.*)\.(yaml|json)", path):
@@ -58,6 +60,7 @@ async def get_ref(request, dist: str, path: str):
         response_filename = path.replace("/", "-")
         return response_fns[requested_format](response_filename, response_dict)
     raise sanic.exceptions.NotFound(f"Could not find {path}")
+
 
 def yaml_response(filename: str, response: dict):
     headers = {
@@ -68,16 +71,19 @@ def yaml_response(filename: str, response: dict):
         headers=headers,
         content_type='application/yaml')
 
+
 def json_response(filename: str, response: dict):
     headers = {
         'Content-Disposition': f'inline; name={filename}'
     }
     return sanic.response.json(response, headers=headers)
 
+
 response_fns = {
     'yaml': yaml_response,
     'json': json_response
 }
+
 
 def get_arg_parser():
     ap = argparse.ArgumentParser()

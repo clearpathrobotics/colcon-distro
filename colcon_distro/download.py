@@ -7,7 +7,6 @@ import os
 import pathlib
 from tempfile import TemporaryDirectory
 import urllib.parse
-import yaml
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -64,14 +63,16 @@ class GitTarballDownloader:
         curl_cmd = f'curl -L {" ".join(header_strs)} {self.base_url}/{url_path}'
         tar_cmd = 'tar --extract --verbose --gzip --strip-components=1'
         if limit_paths and '.' not in limit_paths:
-            tar_cmd = ' '.join([tar_cmd, "--wildcards", "--no-wildcards-match-slash"] + ["*/%s" % p for p in limit_paths])
+            tar_cmd = ' '.join([tar_cmd, "--wildcards", "--no-wildcards-match-slash"]
+                               + ["*/%s" % p for p in limit_paths])
         tar_proc = await asyncio.create_subprocess_shell(
-                f"{curl_cmd} | {tar_cmd}", cwd=path,
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            f"{curl_cmd} | {tar_cmd}", cwd=path,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         tar_stdout, tar_stderr = await tar_proc.communicate()
         if tar_proc.returncode != 0:
             raise DownloadError("Archive download failed.")
-        filelist = [l.decode().split(os.path.sep, maxsplit=1)[1] for l in tar_stdout.splitlines()]
+        filelist = [line.decode().split(os.path.sep, maxsplit=1)[1]
+                    for line in tar_stdout.splitlines()]
         return filelist
 
     async def download_all_to(self, path, limit_paths=None):
@@ -112,7 +113,7 @@ class GitTarballDownloader:
                         return
                     match = re.match(b"oid sha256:([0-9a-f]+)\nsize ([0-9]+)", f.read(), re.MULTILINE)
                     if not match:
-                        raise DownloadError(f"Unable to parse LFS information for {filepath}")
+                        raise DownloadError(f"Unable to parse LFS information for {lfs_filepath}")
                     lfs_sha = match.group(1).decode()
                     lfs_size = int(match.group(2))
                     yield lfs_sha, (lfs_filepath, lfs_size)
@@ -133,10 +134,10 @@ class GitTarballDownloader:
                 for lfs_sha, (lfs_filepath, lfs_size) in lfs_object_dict.items():
                     yield {"oid": lfs_sha, "size": lfs_size}
             return {
-               "operation": "download",
-               "objects": list(_object_list()),
-               "transfers": ["lfs-standalone-file", "basic"],
-               "ref": {"name": self.version}
+                "operation": "download",
+                "objects": list(_object_list()),
+                "transfers": ["lfs-standalone-file", "basic"],
+                "ref": {"name": self.version}
             }
 
         # Auth for the LFS server is slightly different than main GitLab.
@@ -161,7 +162,8 @@ class GitTarballDownloader:
             curl_config.append(f"output = {lfs_filepath}")
             curl_config.append(f"url = {dl['href']}")
 
-        curl_proc = await asyncio.create_subprocess_exec('curl', '-K', '-',
+        curl_proc = await asyncio.create_subprocess_exec(
+            'curl', '-K', '-',
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE)
@@ -209,6 +211,7 @@ def _find_files_from_git_attributes(attributes_filepath, filter_type="lfs"):
                 git_glob = f"**/{git_glob}"
             yield from attributes_filepath.parent.glob(git_glob)
 
+
 class GithubDownloader(GitTarballDownloader):
     SERVER_REGEX = re.compile(r'^github\.com')
     BASE_URL = 'https://{server}'
@@ -220,7 +223,7 @@ class GitLabDownloader(GitTarballDownloader):
     BASE_URL = 'http://{server}'
     TARBALL_PATH = 'api/v4/projects/{repo_path_quoted}/repository/archive.tar.gz?sha={version}'
     FILE_PATH = 'api/v4/projects/{repo_path_quoted}/repository/files/{path_quoted}/raw?ref={version}'
-    headers = { 'Private-Token': os.environ.get('GITLAB_PRIVATE_TOKEN', '') }
+    headers = {'Private-Token': os.environ.get('GITLAB_PRIVATE_TOKEN', '')}
 
 
 class GitLocalFileDownloader:
@@ -229,8 +232,8 @@ class GitLocalFileDownloader:
 
     async def get_file(self, path):
         git_cmd = ['git', 'show', f'{self.version}:{path}']
-        git_proc = await asyncio.create_subprocess_exec(*git_cmd,
-                cwd=self.repo_path, stdout=asyncio.subprocess.PIPE)
+        git_proc = await asyncio.create_subprocess_exec(
+            *git_cmd, cwd=self.repo_path, stdout=asyncio.subprocess.PIPE)
         stdout, stderr = await git_proc.communicate()
         return stdout
 
@@ -240,9 +243,9 @@ class GitRev:
     This class is the main entry point of the module, supplying asynchronous methods to
     intelligently download/access the contents of a remote git repo at a specific ref.
     """
-    URL_REGEX = re.compile('(?:\w+:\/\/|git@)(?P<server>[\w.-]+)[:/](?P<repo_path>[\w/-]*)(?:\.git)?$')
+    URL_REGEX = re.compile(r'(?:\w+:\/\/|git@)(?P<server>[\w.-]+)[:/](?P<repo_path>[\w/-]*)(?:\.git)?$')
     URL_DOWNLOADERS = [GitLabDownloader, GithubDownloader]
-    FILE_REGEX = re.compile('file:\/\/(?P<repo_path>.+)$')
+    FILE_REGEX = re.compile(r'file:\/\/(?P<repo_path>.+)$')
 
     def __init__(self, url, version):
         self.url = url

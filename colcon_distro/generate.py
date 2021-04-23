@@ -1,7 +1,5 @@
 from collections import defaultdict
-import os
 import requests
-import subprocess
 
 from .package import descriptor_from_dict
 

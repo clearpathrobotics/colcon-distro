@@ -6,13 +6,13 @@ from colcon_core.executor import execute_jobs
 from colcon_core.executor import Job
 from colcon_core.executor import OnError
 
-# TODO: Why isn't this working?
-import colcon_output.event_handler.summary
-colcon_output.event_handler.summary.get_job_type_word_form = lambda n: 'repository' if n == 1 else 'repositories'
-
 import os
 import pathlib
 import yaml
+
+# TODO: Why isn't this working?
+import colcon_output.event_handler.summary
+colcon_output.event_handler.summary.get_job_type_word_form = lambda n: 'repository' if n == 1 else 'repositories'
 
 
 class DownloadVerb(VerbExtensionPoint):
@@ -36,9 +36,9 @@ class DownloadVerb(VerbExtensionPoint):
 
     def add_arguments(self, *, parser):  # noqa: D102
         parser.add_argument('--input-file', '-i', default='.workspace',
-            help='YAML file to load repository list from.')
+                            help='YAML file to load repository list from.')
         parser.add_argument('--src-base', '-s', default='src',
-            help='Path to unpack repo tarballs to.')
+                            help='Path to unpack repo tarballs to.')
         add_executor_arguments(parser)
         add_event_handler_arguments(parser)
 
@@ -47,7 +47,6 @@ class DownloadVerb(VerbExtensionPoint):
 
         with open(context.args.input_file) as f:
             repositories = yaml.safe_load(f)['repositories']
-
 
         class Dummy:
             def __init__(self, name):
