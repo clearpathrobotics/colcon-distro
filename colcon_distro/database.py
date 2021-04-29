@@ -16,6 +16,12 @@ logger.setLevel(logging.INFO)
 
 
 class Database:
+    """
+    This class is a low-level wrapper on the SQLite interface, supplying function wrappers
+    for all needed queries, but not any processing or abstraction. That is handled by
+    :class:`~colcon_distro.model.Model`, which should be the only class using this one.
+    """
+
     SCHEMA_SCRIPT = "schema.sql"
     PRAGMA_FOREIGN_KEYS = "PRAGMA foreign_keys=1"
     FETCH_SET_QUERY = """
@@ -109,6 +115,9 @@ class Connection:
     queries from another, since sqlite has no built in concept of there being multiple
     clients or concurrent transactions going on. Second, it starts a background task
     which on cancelation closes the connection.
+
+    A common instance of this class is used as a context manager. It yields the database
+    handle and the caller must not store or continue to use it when the context has exited.
     """
     def __init__(self, filepath, connect_fn=None):
         # Lazy-initialize all async stuff so we don't get the wrong loop if this

@@ -5,6 +5,7 @@ from colcon_core.package_identification import get_package_identification_extens
 
 import argparse
 import asyncio
+import functools
 import json
 import logging
 import operator
@@ -38,6 +39,13 @@ class ModelInternalError(ModelError):
 
 
 class Model:
+    """
+    This class provides the high level interface which may be queried for repo sets.
+
+    Under the hood, it manages persistence via the database, but also sends work to
+    be done and pauses requests for which the work is already in progress.
+    """
+
     def __init__(self, config, db):
         self.config = config
         self.db = db
@@ -59,6 +67,7 @@ class Model:
         uniqueness constraints in the database by inserting the same results multiple times.
         """
 
+        @functools.wraps(fn)
         async def wrapper(self, *args):
             ident = (fn.__name__, *args)
 

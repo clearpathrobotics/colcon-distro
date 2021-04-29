@@ -240,8 +240,9 @@ class GitLocalFileDownloader:
 
 class GitRev:
     """
-    This class is the main entry point of the module, supplying asynchronous methods to
-    intelligently download/access the contents of a remote git repo at a specific ref.
+    This class supplies asynchronous methods to download/access the contents of a remote or
+    local git repo at a specific ref, choosing an appropriate backend depending on the URL
+    that is passed into the constructor (eg, GitLab vs GitHub vs git).
     """
     URL_REGEX = re.compile(r'(?:\w+:\/\/|git@)(?P<server>[\w.-]+)[:/](?P<repo_path>[\w/-]*)(?:\.git)?$')
     URL_DOWNLOADERS = [GitLabDownloader, GithubDownloader]
