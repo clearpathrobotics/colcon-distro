@@ -9,8 +9,10 @@ URL. A heuristic may be used to guess that a ref is a hash or tag, with
 ambiguous cases being checked against the git ls-remote output (or equivalent
 API native to the repo host).
 
-The descriptors is a JSON array of PackageDescriptor object serializations,
-including metadata which may have been added by package augmentation plugins.
+The package_descriptors field is a JSON array of PackageDescriptor object
+serializations, including metadata which may have been added by package
+augmentation plugins. The metadata field is a JSON object of potential extra
+repo-level metadata added via RepositoryAugmentationExtensionPoint add-ons.
 
 Branch/sequence information is intended to go in a separate table as needed
 later on, eg a repo_branches table which contains pointers to repo_states
@@ -27,6 +29,7 @@ CREATE TABLE repo_states (
     type VARCHAR(4) NOT NULL,
     url VARCHAR(256) NOT NULL,
     version VARCHAR(40) NOT NULL,
+    metadata TEXT NOT NULL,
     package_descriptors TEXT NOT NULL
 );
 

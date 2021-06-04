@@ -6,6 +6,7 @@ import operator
 import yaml
 
 from .discovery import discover_augmented_packages
+from .repository_augmentation import augment_repository
 from .download import GitRev
 from .package import descriptor_to_dict
 
@@ -144,6 +145,7 @@ class Model:
             gitrev = GitRev(url, version)
             async with gitrev.tempdir_download() as repo_dir:
                 descriptors = discover_augmented_packages(repo_dir)
+                repository_metadata = augment_repository(repo_dir)
 
         if not descriptors:
             raise ModelError(f"No packages discovered in {url}.")
