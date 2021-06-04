@@ -22,6 +22,9 @@ Reference
 
         .. autocomethod:: Model.get_repo_state
 
+.. automodule:: colcon_distro.discovery
+    :members:
+
 .. automodule:: colcon_distro.database
 
     .. autoclass:: Connection
