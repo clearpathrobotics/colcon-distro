@@ -62,9 +62,5 @@ def test_model_github_hashes():
         # This one will return from the database, so we want to confirm that it's an
         # identical result to the above.
         # TODO: Somehow confirm that it doesn't re-fetch anything. Check logging maybe?
-        database2 = Database(config)
-        model2 = Model(config, database2)
-        descriptors2 = asyncio.run(model2.get_set('banana', 'roscpp-github-hashes'))
-        print([d.name for d in descriptors])
-        print([d.name for d in descriptors2])
+        descriptors2 = asyncio.run(model.get_set('banana', 'roscpp-github-hashes'))
         assert descriptors == descriptors2
