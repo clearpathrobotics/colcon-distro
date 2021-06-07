@@ -72,15 +72,25 @@ class RepositoryDescriptor:
         """
         return json.dumps(self.packages_dicts())
 
-    def has_identity(self):
+    def identity(self):
         """
-        Object has "identity" if it has a name and source control info.
+        An identification tuple used for hashing and equality checks. Returns
+        None if any of the required fields are unset.
         """
-        return self.name != None and self.type != None and \
-            self.url != None and self.version != None
+        identity_tuple = (self.name, self.type, self.url, self.version)
+        return identity_tuple if all(identity_tuple) else None
 
-    def __eg__(self, other):
-        return self.name == other.name and \
-            self.type == other.type and \
-            self.url == other.url and \
-            self.version == other.version
+    def __eq__(self, other):
+        sid = self.identity()
+        oid = other.identity()
+        if sid and oid:
+            return sid == oid
+        else:
+            raise NotImplementedError
+
+    def __hash__(self):
+        tup = self.identity()
+        if tup:
+            return hash(self.identity())
+        else:
+            raise NotImplementedError

@@ -7,7 +7,7 @@ import yaml
 
 from .config import add_config_args, get_config
 from .database import Database
-from .model import Model
+from .model import Model, ModelError
 from .vendor.compress import Compress
 
 
@@ -29,7 +29,10 @@ Compress(app)
 
 
 async def get_response_dict(model, dist, ref):
-    repository_descriptors = await model.get_set(dist, ref)
+    try:
+        repository_descriptors = await model.get_set(dist, ref)
+    except ModelError as e:
+        raise sanic.exceptions.NotFound(str(e))
 
     def repo_states_items():
         for desc in repository_descriptors:

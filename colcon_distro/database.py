@@ -104,14 +104,9 @@ class Database:
         database. If found, the descriptor is populated with the row id and parsed
         PackageDescriptors; it not found RepositoryNotFound is raised.
         """
-        assert desc.has_identity()
+        query_args = desc.identity()
+        assert query_args
         async with self.connection() as db:
-            query_args = (
-                desc.name,
-                desc.type,
-                desc.url,
-                desc.version
-            )
             cursor = await db.execute(self.FETCH_REPO_STATE_QUERY, query_args)
             result = await cursor.fetchall()
             if result:

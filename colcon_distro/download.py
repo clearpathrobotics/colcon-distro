@@ -286,5 +286,5 @@ class GitRev:
         if git_stderr:
             raise DownloadError(f"Unexpected error output from git ls-remote: {git_stderr}")
         if not git_output:
-            raise DownloadError(f"Distro ref {self.version} could not be found in the git remote.")
+            raise DownloadError(f"Distro ref {self.descriptor.version} could not be found in the git remote.")
         return git_output.split()[0].decode()

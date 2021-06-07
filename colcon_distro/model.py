@@ -7,7 +7,7 @@ import yaml
 
 from .database import RepositoryNotFound, RepositorySetNotFound
 from .discovery import discover_augmented_packages
-from .download import GitRev
+from .download import GitRev, DownloadError
 from .package import descriptor_to_dict
 from .repository_augmentation import augment_repository
 from .repository_descriptor import RepositoryDescriptor
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-class ModelError(Exception):
+class ModelError(RuntimeError):
     """
     General exception for Model-related errors.
     """
@@ -105,7 +105,10 @@ class Model:
             distro_descriptor.type = 'git'
             distro_descriptor.version = ref
             distro_rev = GitRev(distro_descriptor)
-            distro_rev.version = await distro_rev.version_hash_lookup()
+            try:
+                distro_rev.version = await distro_rev.version_hash_lookup()
+            except DownloadError as e:
+                raise ModelError(f"Unable to access rosdistro: {e}")
             distro_rev.downloader.version = distro_rev.version
             index_yaml_str = await distro_rev.downloader.get_file(self.config.DIST_INDEX_YAML_FILE)
             index_dict = yaml.safe_load(index_yaml_str)
@@ -113,7 +116,7 @@ class Model:
             if dist_name in index_dict['distributions']:
                 dist_file_path = index_dict['distributions'][dist_name]['distribution'][0]
             else:
-                raise ModelError("Unknown distro [{dist_name}] specified.")
+                raise ModelError(f"Unknown distro [{dist_name}] specified.")
             distro_dict = yaml.safe_load(await distro_rev.downloader.get_file(dist_file_path))
 
             def _get_repo_states():
@@ -140,7 +143,7 @@ class Model:
         """
 
         # The descriptor passed must have name and source info.
-        assert repository_descriptor.has_identity()
+        assert repository_descriptor.identity()
 
         # Check if we already have this in the database.
         try:
