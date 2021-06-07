@@ -1,9 +1,3 @@
-
-
-from colcon_core.package_discovery import discover_packages
-from colcon_core.package_identification import get_package_identification_extensions
-
-import argparse
 import asyncio
 import functools
 import json
@@ -11,6 +5,7 @@ import logging
 import operator
 import yaml
 
+from .discovery import discover_augmented_packages
 from .download import GitRev
 from .package import descriptor_to_dict
 
@@ -49,7 +44,6 @@ class Model:
     def __init__(self, config, db):
         self.config = config
         self.db = db
-        self.extensions = get_package_identification_extensions()
         self.in_progress = {}
 
         # Limit how much work we try to do at once.
@@ -149,9 +143,7 @@ class Model:
         async with self.semaphore:
             gitrev = GitRev(url, version)
             async with gitrev.tempdir_download() as repo_dir:
-                descriptors = discover_packages(self._get_discovery_args(repo_dir), self.extensions)
-                for descriptor in descriptors:
-                    descriptor.path = descriptor.path.relative_to(repo_dir)
+                descriptors = discover_augmented_packages(repo_dir)
 
         if not descriptors:
             raise ModelError(f"No packages discovered in {url}.")
@@ -163,9 +155,3 @@ class Model:
         repo_state_args = (name, typename, url, version, json.dumps(json_obj))
         row_id = await self.db.insert_repo_state(*repo_state_args)
         return row_id, name, typename, url, version, json_obj
-
-    @staticmethod
-    def _get_discovery_args(path):
-        # See: https://github.com/colcon/colcon-core/issues/378
-        return argparse.Namespace(base_paths=[path], ignore_user_meta=True,
-                                  paths=None, metas=['./colcon.meta'])
