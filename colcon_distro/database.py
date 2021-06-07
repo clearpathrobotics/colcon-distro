@@ -17,6 +17,7 @@ logger.setLevel(logging.INFO)
 # sqlite operations to the other thread to do them "asyncronously". We could probably
 # save a bunch of this is we did the insertions in batches.
 
+
 class RepositoryNotFound(Exception):
     pass
 

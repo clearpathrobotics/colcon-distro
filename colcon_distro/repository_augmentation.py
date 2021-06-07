@@ -40,8 +40,7 @@ class RepositoryAugmentationExtensionPoint:
 
 def get_repository_augmentation_extensions():
     """Get the repository augmentation extensions in priority order."""
-    #extensions = instantiate_extensions(__name__)
-    extensions = instantiate_extensions("colcon_distro.repository_augmentation")
+    extensions = instantiate_extensions(__name__)
     for name, extension in extensions.items():
         extension.REPOSITORY_AUGMENTATION_NAME = name
     return order_extensions_by_priority(extensions)
@@ -62,12 +61,3 @@ def augment_repository(repository_descriptor: RepositoryDescriptor):
                 'Exception in repostory augmentation extension '
                 f"'{extension.REPOSITORY_AUGMENTATION_NAME}': {e}\n{exc}")
             # skip failing extension, continue with next one
-
-
-# Small entry point here for isolated testing purposes. Example use:
-#
-#   git clone https://github.com/ros/roscpp_core
-#   python3 -m colcon_distro.repository_augmentation ./roscpp_core
-if __name__ == "__main__":  # pragma: no cover
-    from sys import argv
-    print(augment_repository(argv[1]))

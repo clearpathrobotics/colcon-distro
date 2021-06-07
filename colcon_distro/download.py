@@ -267,7 +267,7 @@ class GitRev:
             self.downloader = GitLocalFileDownloader(repo_path=self.repo_path,
                                                      version=self.descriptor.version)
         else:
-            raise DownloadError(f"Unable to download from {url}")
+            raise DownloadError(f"Unable to download from {self.descriptor.url}")
 
     @contextlib.asynccontextmanager
     async def tempdir_download(self):

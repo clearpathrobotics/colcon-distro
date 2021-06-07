@@ -1,5 +1,4 @@
-from colcon_core.package_augmentation import \
-    augment_packages, get_package_augmentation_extensions
+from colcon_core.package_augmentation import augment_packages
 from colcon_core.package_discovery import discover_packages
 from colcon_core.package_identification import get_package_identification_extensions
 

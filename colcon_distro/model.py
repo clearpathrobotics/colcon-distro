@@ -1,14 +1,11 @@
 import asyncio
 import functools
-import json
 import logging
-import operator
 import yaml
 
 from .database import RepositoryNotFound, RepositorySetNotFound
 from .discovery import discover_augmented_packages
 from .download import GitRev, DownloadError
-from .package import descriptor_to_dict
 from .repository_augmentation import augment_repository
 from .repository_descriptor import RepositoryDescriptor
 

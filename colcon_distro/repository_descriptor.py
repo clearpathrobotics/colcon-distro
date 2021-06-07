@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 from .package import descriptor_to_dict, descriptor_from_dict
 
@@ -48,7 +47,7 @@ class RepositoryDescriptor:
         """
         Returns the json serialization of the metadata field.
         """
-        assert self.metadata != None
+        assert self.metadata is not None
         return json.dumps(self.metadata)
 
     def parse_packages_json(self, packages_json: str):
@@ -63,7 +62,7 @@ class RepositoryDescriptor:
         """
         Returns the packages field as a list of package dicts
         """
-        assert self.packages != None
+        assert self.packages is not None
         return [descriptor_to_dict(pd) for pd in self.packages]
 
     def packages_json(self):
