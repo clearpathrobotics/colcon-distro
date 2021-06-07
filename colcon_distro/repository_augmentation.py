@@ -4,7 +4,8 @@ from colcon_core.logging import colcon_logger
 from colcon_core.plugin_system import instantiate_extensions
 from colcon_core.plugin_system import order_extensions_by_priority
 
-from typing import Optional
+from .repository_descriptor import RepositoryDescriptor
+
 
 logger = colcon_logger.getChild(__name__)
 
@@ -42,22 +43,18 @@ def get_repository_augmentation_extensions():
     #extensions = instantiate_extensions(__name__)
     extensions = instantiate_extensions("colcon_distro.repository_augmentation")
     for name, extension in extensions.items():
-        print(name)
         extension.REPOSITORY_AUGMENTATION_NAME = name
     return order_extensions_by_priority(extensions)
 
 
-def augment_repository(path, metadata: Optional[dict]=None):
+def augment_repository(repository_descriptor: RepositoryDescriptor):
     """Augment the pass repository and return the metadata dict."""
-    logger.debug(1, f"augment_repository called for {path}")
-    if metadata is None:
-        metadata = {}
+    logger.debug(f"augment_repository called for {repository_descriptor.path}")
     # apply extension augmentations in priority order
     extensions = get_repository_augmentation_extensions()
-    print(extensions)
     for extension in extensions.values():
         try:
-            extension.augment_repository(path, metadata)
+            extension.augment_repository(repository_descriptor)
         except Exception as e:  # noqa: F841
             # catch exceptions raised in completer extension
             exc = traceback.format_exc()
@@ -65,7 +62,6 @@ def augment_repository(path, metadata: Optional[dict]=None):
                 'Exception in repostory augmentation extension '
                 f"'{extension.REPOSITORY_AUGMENTATION_NAME}': {e}\n{exc}")
             # skip failing extension, continue with next one
-    return metadata
 
 
 # Small entry point here for isolated testing purposes. Example use:

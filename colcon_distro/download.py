@@ -8,6 +8,8 @@ import pathlib
 from tempfile import TemporaryDirectory
 import urllib.parse
 
+from .repository_descriptor import RepositoryDescriptor
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -248,23 +250,22 @@ class GitRev:
     URL_DOWNLOADERS = [GitLabDownloader, GithubDownloader]
     FILE_REGEX = re.compile(r'file:\/\/(?P<repo_path>.+)$')
 
-    def __init__(self, url, version):
-        self.url = url
-        self.version = version
-        if match := self.URL_REGEX.match(url):
+    def __init__(self, repository_descriptor: RepositoryDescriptor):
+        self.descriptor = repository_descriptor
+        if match := self.URL_REGEX.match(self.descriptor.url):
             # Recognized remote hosts (Github, GitLab)
             self.__dict__.update(match.groupdict())
             for dl_cls in self.URL_DOWNLOADERS:
                 if dl_cls.SERVER_REGEX.match(self.server):
                     self.downloader = dl_cls(server=self.server,
                                              repo_path=self.repo_path,
-                                             version=self.version)
+                                             version=self.descriptor.version)
                     break
-        elif match := self.FILE_REGEX.match(url):
+        elif match := self.FILE_REGEX.match(self.descriptor.url):
             # Repo on the local filesystem
             self.__dict__.update(match.groupdict())
             self.downloader = GitLocalFileDownloader(repo_path=self.repo_path,
-                                                     version=version)
+                                                     version=self.descriptor.version)
         else:
             raise DownloadError(f"Unable to download from {url}")
 
@@ -272,12 +273,15 @@ class GitRev:
     async def tempdir_download(self):
         dirname = f"colcon-distro--{self.repo_path.replace('/', '-')}--"
         with TemporaryDirectory(prefix=dirname, dir="/var/tmp") as tempdir:
+            self.descriptor.path = tempdir
             await self.downloader.download_all_to(pathlib.Path(tempdir))
-            yield tempdir
+            yield
+            self.descriptor.path = None
 
     async def version_hash_lookup(self):
-        git_proc = await asyncio.create_subprocess_exec('git', 'ls-remote', self.url, self.version,
-                                                        stdout=asyncio.subprocess.PIPE)
+        git_proc = await asyncio.create_subprocess_exec(
+            'git', 'ls-remote', self.descriptor.url, self.descriptor.version,
+            stdout=asyncio.subprocess.PIPE)
         git_output, git_stderr = await git_proc.communicate()
         if git_stderr:
             raise DownloadError(f"Unexpected error output from git ls-remote: {git_stderr}")

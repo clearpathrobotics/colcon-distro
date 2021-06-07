@@ -29,17 +29,17 @@ Compress(app)
 
 
 async def get_response_dict(model, dist, ref):
-    repo_states_list = await model.get_set(dist, ref)
+    repository_descriptors = await model.get_set(dist, ref)
 
     def repo_states_items():
-        for name, typename, url, version, packages in repo_states_list:
+        for desc in repository_descriptors:
             repo_dict = {
-                'type': typename,
-                'url': url,
-                'version': version,
-                'packages': packages
+                'type': desc.type,
+                'url': desc.url,
+                'version': desc.version,
+                'packages': desc.packages_dicts()
             }
-            yield name, repo_dict
+            yield desc.name, repo_dict
     # Include the original request information in the response to facilitate using
     # this result with an import workflow (not yet implemented).
     return {

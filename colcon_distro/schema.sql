@@ -49,11 +49,11 @@ copy of the distribution.yaml would need to be fetched anyway.
 CREATE TABLE sets (
     id INTEGER PRIMARY KEY,
     dist VARCHAR(16) NOT NULL,
-    name VARCHAR(64) NOT NULL,
+    ref VARCHAR(64) NOT NULL,
     last_updated DATETIME
 );
 
-CREATE UNIQUE INDEX set_names ON sets(name, dist);
+CREATE UNIQUE INDEX set_names ON sets(ref, dist);
 
 /*
 Join table for mapping sets and repo states together. These are added last, and
