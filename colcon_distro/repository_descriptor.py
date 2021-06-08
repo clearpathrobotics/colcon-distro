@@ -1,5 +1,3 @@
-import json
-
 from .package import descriptor_to_dict, descriptor_from_dict
 
 
@@ -36,40 +34,20 @@ class RepositoryDescriptor:
         rd.version = source_dict['version']
         return rd
 
-    def parse_metadata_json(self, metadata_json: str):
+    def parse_packages_dicts(self, packages_dicts: str):
         """
-        Parses the passed-in metadata_json string, and sets the metadata dict
-        accordingly.
+        Parses the passed-in packages_dicts string, and sets the packages list
+        to PackageDescriptor objects.
         """
-        self.metadata = json.loads(metadata_json)
-
-    def metadata_json(self):
-        """
-        Returns the json serialization of the metadata field.
-        """
-        assert self.metadata is not None
-        return json.dumps(self.metadata)
-
-    def parse_packages_json(self, packages_json: str):
-        """
-        Parses the passed-in packages_json string, and sets the packages list
-        accordingly.
-        """
-        packages_dicts = json.loads(packages_json)
         self.packages = [descriptor_from_dict(pd) for pd in packages_dicts]
 
     def packages_dicts(self):
         """
-        Returns the packages field as a list of package dicts
+        Returns the packages field as a list of package dicts, ready to be
+        serialized either to database or in a JSON HTTP response.
         """
         assert self.packages is not None
         return [descriptor_to_dict(pd) for pd in self.packages]
-
-    def packages_json(self):
-        """
-        Returns the json serialization of the packages field.
-        """
-        return json.dumps(self.packages_dicts())
 
     def identity(self):
         """

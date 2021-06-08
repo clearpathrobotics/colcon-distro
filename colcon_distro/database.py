@@ -2,6 +2,7 @@
 import aiosqlite
 import asyncio
 import contextlib
+import json
 import logging
 import pkg_resources
 import sqlite3
@@ -93,7 +94,7 @@ class Database:
                     desc.type = data[1]
                     desc.url = data[2]
                     desc.version = data[3]
-                    desc.parse_packages_json(data[4])
+                    desc.parse_packages_dicts(json.loads(data[4]))
                     repository_descriptors.append(desc)
                 return repository_descriptors
             else:
@@ -112,8 +113,9 @@ class Database:
             result = await cursor.fetchall()
             if result:
                 repo_state_id, metadata_str, packages_str = result[0]
-                desc.parse_metadata_json(metadata_str)
-                desc.parse_packages_json(packages_str)
+                desc.metadata = json.loads(metadata_str)
+                packages_dicts = json.loads(packages_str)
+                desc.parse_packages_dicts(packages_dicts)
                 desc.metadata['repo_state_id'] = repo_state_id
             else:
                 raise RepositoryNotFound
@@ -129,8 +131,8 @@ class Database:
                 desc.type,
                 desc.url,
                 desc.version,
-                desc.metadata_json(),
-                desc.packages_json()
+                json.dumps(desc.metadata),
+                json.dumps(desc.packages_dicts()),
             )
             cursor = await db.execute(self.INSERT_REPO_STATE_QUERY, query_args)
             desc.metadata['repo_state_id'] = cursor.lastrowid
