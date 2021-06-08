@@ -1,20 +1,20 @@
 import asyncio
 import functools
-import json
 import logging
-import operator
 import yaml
 
+from .database import RepositoryNotFound, RepositorySetNotFound
 from .discovery import discover_augmented_packages
-from .download import GitRev
-from .package import descriptor_to_dict
+from .download import GitRev, DownloadError
+from .repository_augmentation import augment_repository
+from .repository_descriptor import RepositoryDescriptor
 
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-class ModelError(Exception):
+class ModelError(RuntimeError):
     """
     General exception for Model-related errors.
     """
@@ -75,83 +75,89 @@ class Model:
         return wrapper
 
     @remember_progress
-    async def get_set(self, dist_name, name):
+    async def get_set(self, dist_name, ref):
         """
-        Returns a set of repo state rows, by fetching them from the database if possible,
-        and falling back to building it up manually if required, after which it is saved
+        Returns a set of repository descriptors, by fetching them from the database if possible,
+        and falling back to building up manually if required, after which it is saved
         in the database and returned.
+
+        :param: dist_name name of the distribution (eg, noetic)
+        :param: ref version control reference to fetch (currently only frozen tags and
+            snapshots are supported).
         """
         # Trim the ref prefix if included.
-        if name.startswith("refs/"):
-            name = name.split("refs/")[1]
+        if ref.startswith("refs/"):
+            ref = ref.split("refs/")[1]
 
         # Check if we have it already in the database, returning as-is if so. Unfortunately
         # we do have to rebuild the list to parse the json, as tuples are immutable.
-        if set_repo_states := await self.db.fetch_set(dist_name, name):
-            logger.info(f"Returning cache for {dist_name}:{name} from the database.")
-            parsed_repo_states = []
-            for repo_state in set_repo_states:
-                parsed_repo_states.append(repo_state[0:-1] + (json.loads(repo_state[-1]),))
-            return parsed_repo_states
+        try:
+            repository_descriptors = await self.db.fetch_set(dist_name, ref)
+            logger.info(f"Returning cache for {dist_name}:{ref} from the database.")
+        except RepositorySetNotFound:
+            # Not in the database, so we need to start generating it. First access the
+            # distribution.yaml itself so that we have the raw list of repo versions.
+            distro_descriptor = RepositoryDescriptor()
+            distro_descriptor.url = self.config.distro.repository
+            distro_descriptor.type = 'git'
+            distro_descriptor.version = ref
+            distro_rev = GitRev(distro_descriptor)
+            try:
+                distro_rev.version = await distro_rev.version_hash_lookup()
+            except DownloadError as e:
+                raise ModelError(f"Unable to access rosdistro: {e}")
+            distro_rev.downloader.version = distro_rev.version
+            index_yaml_str = await distro_rev.downloader.get_file(self.config.DIST_INDEX_YAML_FILE)
+            index_dict = yaml.safe_load(index_yaml_str)
 
-        # Not in the database, so we need to start generating it. First access the
-        # distribution.yaml itself so that we have the raw list of repo versions.
-        distro_rev = GitRev(self.config.distro.repository, name)
-        distro_rev.version = await distro_rev.version_hash_lookup()
-        distro_rev.downloader.version = distro_rev.version
-        index_yaml_str = await distro_rev.downloader.get_file(self.config.DIST_INDEX_YAML_FILE)
-        index_obj = yaml.safe_load(index_yaml_str)
+            if dist_name in index_dict['distributions']:
+                dist_file_path = index_dict['distributions'][dist_name]['distribution'][0]
+            else:
+                raise ModelError(f"Unknown distro [{dist_name}] specified.")
+            distro_dict = yaml.safe_load(await distro_rev.downloader.get_file(dist_file_path))
 
-        if dist_name in index_obj['distributions']:
-            dist_file_path = index_obj['distributions'][dist_name]['distribution'][0]
-        else:
-            raise ModelError("Unknown distro [{dist_name}] specified.")
-        distro_obj = yaml.safe_load(await distro_rev.downloader.get_file(dist_file_path))
+            def _get_repo_states():
+                """ Generate getter coroutines for all repo states. """
+                for repo_name, repo_dict in distro_dict['repositories'].items():
+                    desc = RepositoryDescriptor.from_distro(repo_name, repo_dict['source'])
+                    yield self.get_repo_state(desc)
 
-        def _get_repo_states():
-            """ Generate getter coroutines for all repo states. """
-            for repo_name, repo_obj in distro_obj['repositories'].items():
-                source = repo_obj['source']
-                yield self.get_repo_state(repo_name, source['type'], source['url'], source['version'])
+            logger.info(f"Preparing cache for {dist_name}:{ref}.")
+            repository_descriptors = await asyncio.gather(*_get_repo_states())
 
-        logger.info(f"Preparing cache for {dist_name}:{name}.")
-        repo_states = await asyncio.gather(*_get_repo_states())
-
-        repo_state_ids = [repo_state_tuple[0] for repo_state_tuple in repo_states]
-        await self.db.insert_set(dist_name, name, repo_state_ids)
-        logger.info(f"Cache for {dist_name}:{name} is now saved to the database")
-
-        # Trim off the row_id values as they aren't part of what this function returns.
-        repo_states = [repo_state_tuple[1:] for repo_state_tuple in repo_states]
-        return repo_states
+            repo_state_ids = [desc.metadata['repo_state_id'] for desc in repository_descriptors]
+            await self.db.insert_set(dist_name, ref, repo_state_ids)
+            logger.info(f"Cache for {dist_name}:{ref} is now saved to the database")
+        return repository_descriptors
 
     @remember_progress
-    async def get_repo_state(self, name, typename, url, version):
+    async def get_repo_state(self, repository_descriptor):
         """
-        Given the search terms, should always return a tuple that is an ID to a database row
-        where the repo state data is stored, and a Python object that is the JSON reprentation
-        of the serialized PackageDescriptor list for that repo state.
+        Populates the passed repository_descriptor with PackageDescriptor instances
+        in the packages set, and a repo_state_id field in the metadata dict. This may happen
+        because all of the information was in the cache, or some or all of it may have
+        to have been pulled from the original source.
         """
+
+        # The descriptor passed must have name and source info.
+        assert repository_descriptor.identity()
+
         # Check if we already have this in the database.
-        if repo_state := await self.db.fetch_repo_state(name, typename, url, version):
-            row_id, json_str = repo_state
-            return row_id, name, typename, url, version, json.loads(json_str)
+        try:
+            await self.db.fetch_repo_state(repository_descriptor)
+        except RepositoryNotFound:
+            # If not, grab the source and find the package descriptors, modifying
+            # each so the path is relative to the repo rather than absolute.
+            self.semaphore = self.semaphore or asyncio.Semaphore(self.config.get_parallelism())
+            async with self.semaphore:
+                async with GitRev(repository_descriptor).tempdir_download():
+                    repository_descriptor.packages = \
+                        discover_augmented_packages(repository_descriptor.path)
+                    augment_repository(repository_descriptor)
 
-        # If not, grab the source and find the package descriptors, modifying
-        # each so the path is relative to the repo rather than absolute.
-        self.semaphore = self.semaphore or asyncio.Semaphore(self.config.get_parallelism())
-        async with self.semaphore:
-            gitrev = GitRev(url, version)
-            async with gitrev.tempdir_download() as repo_dir:
-                descriptors = discover_augmented_packages(repo_dir)
+            if not repository_descriptor.packages:
+                raise ModelError(f"No packages discovered in {repository_descriptor.url}.")
 
-        if not descriptors:
-            raise ModelError(f"No packages discovered in {url}.")
-
-        sorted_descriptors = sorted(descriptors, key=operator.attrgetter('name'))
-        json_obj = [descriptor_to_dict(d) for d in sorted_descriptors]
-
-        # Insert it as a new row, and return that row's id.
-        repo_state_args = (name, typename, url, version, json.dumps(json_obj))
-        row_id = await self.db.insert_repo_state(*repo_state_args)
-        return row_id, name, typename, url, version, json_obj
+            # Insert it as a new row, which will set the repo_state_id metadata on it.
+            await self.db.insert_repo_state(repository_descriptor)
+        return repository_descriptor

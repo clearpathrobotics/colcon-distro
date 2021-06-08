@@ -37,7 +37,6 @@ class DummyConfig(Config):
         self._git('tag', state_name)
 
     def get_database_filepath(self):
-        return Path("/tmp/distro.db")
         return self.dir / 'distro.db'
 
     def _git(self, *cmds):
@@ -57,11 +56,11 @@ def test_model_github_hashes():
         model = Model(config, database)
 
         # This call will cause the repos in the distribution to be cached.
-        repo_set_initial = asyncio.run(model.get_set('banana', 'roscpp-github-hashes'))
-        assert len(repo_set_initial) == 16
+        descriptors = asyncio.run(model.get_set('banana', 'roscpp-github-hashes'))
+        assert len(descriptors) == 16
 
         # This one will return from the database, so we want to confirm that it's an
         # identical result to the above.
         # TODO: Somehow confirm that it doesn't re-fetch anything. Check logging maybe?
-        repo_set_second = asyncio.run(model.get_set('banana', 'roscpp-github-hashes'))
-        assert repo_set_initial == repo_set_second
+        descriptors2 = asyncio.run(model.get_set('banana', 'roscpp-github-hashes'))
+        assert descriptors == descriptors2

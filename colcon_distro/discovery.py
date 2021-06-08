@@ -1,12 +1,8 @@
-from colcon_core.package_augmentation import \
-    augment_packages, get_package_augmentation_extensions
+from colcon_core.package_augmentation import augment_packages
 from colcon_core.package_discovery import discover_packages
 from colcon_core.package_identification import get_package_identification_extensions
 
 import argparse
-
-augmentation_extensions = None
-identification_extensions = None
 
 
 def discover_augmented_packages(repo_dir):
@@ -15,28 +11,15 @@ def discover_augmented_packages(repo_dir):
     packages in a particular filesystem path, and then augumenting them according
     to available plugins.
     """
-    _load_extensions()
-
+    identification_extensions = get_package_identification_extensions()
     descriptors = discover_packages(_get_discovery_args(repo_dir),
                                     identification_extensions)
-    augment_packages(descriptors,
-                     augmentation_extensions=augmentation_extensions)
+    augment_packages(descriptors)
 
     for descriptor in descriptors:
         descriptor.path = descriptor.path.relative_to(repo_dir)
 
     return descriptors
-
-
-def _load_extensions():
-    """ Lazy loading for colcon extensions. """
-    global identification_extensions
-    if identification_extensions is None:
-        identification_extensions = get_package_identification_extensions()
-
-    global augmentation_extensions
-    if augmentation_extensions is None:
-        augmentation_extensions = get_package_augmentation_extensions()
 
 
 def _get_discovery_args(path):

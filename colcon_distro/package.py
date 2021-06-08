@@ -18,24 +18,26 @@ def dependency_str(dep):
     raise ValueError("Unexpected dependency type.")
 
 
-def descriptor_to_dict(d):
+def descriptor_to_dict(pd: PackageDescriptor):
     depends_output = {}
     for deptype in ('build', 'run', 'test'):
-        if deptype in d.dependencies and d.dependencies[deptype]:
-            depends_output[deptype] = sorted([dependency_str(dep) for dep in d.dependencies[deptype]])
+        if deptype in pd.dependencies and pd.dependencies[deptype]:
+            dependency_strs = [dependency_str(dep) for dep in pd.dependencies[deptype]]
+            dependency_strs.sort()
+            depends_output[deptype] = dependency_strs
     return {
-        'name': d.name,
-        'path': str(d.path),
-        'type': d.type,
+        'name': pd.name,
+        'path': str(pd.path),
+        'type': pd.type,
         'depends': depends_output
     }
 
 
-def descriptor_from_dict(obj):
-    d = PackageDescriptor(obj['path'])
-    d.name = obj['name']
-    d.type = obj['type']
-    for deptype, deplist in obj['depends'].items():
+def descriptor_from_dict(d: dict):
+    pd = PackageDescriptor(d['path'])
+    pd.name = d['name']
+    pd.type = d['type']
+    for deptype, deplist in d['depends'].items():
         for depname in deplist:
-            d.dependencies[deptype].add(DependencyDescriptor(depname))
-    return d
+            pd.dependencies[deptype].add(DependencyDescriptor(depname))
+    return pd

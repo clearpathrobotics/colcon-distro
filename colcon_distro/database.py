@@ -2,9 +2,13 @@
 import aiosqlite
 import asyncio
 import contextlib
+import json
 import logging
 import pkg_resources
 import sqlite3
+from typing import Iterable
+
+from .repository_descriptor import RepositoryDescriptor
 
 
 logger = logging.getLogger(__name__)
@@ -15,30 +19,39 @@ logger.setLevel(logging.INFO)
 # save a bunch of this is we did the insertions in batches.
 
 
+class RepositoryNotFound(Exception):
+    pass
+
+
+class RepositorySetNotFound(Exception):
+    pass
+
+
 class Database:
     """
     This class is a low-level wrapper on the SQLite interface, supplying function wrappers
-    for all needed queries, but not any processing or abstraction. That is handled by
-    :class:`~colcon_distro.model.Model`, which should be the only class using this one.
+    for all needed queries, with some limited processing such as converting to results between
+    RepositoryDescriptor objects and calling the methods on that class which handle JSON
+    serialization around the packages field.
     """
 
     SCHEMA_SCRIPT = "schema.sql"
     PRAGMA_FOREIGN_KEYS = "PRAGMA foreign_keys=1"
     FETCH_SET_QUERY = """
-    SELECT repo_states.name, type, url, version, package_descriptors
+    SELECT name, type, url, version, package_descriptors
     FROM repo_states
     JOIN set_repo_states ON repo_states.id = set_repo_states.repo_state_id
     JOIN sets ON set_repo_states.set_id == sets.id
-    WHERE sets.dist = ? AND sets.name = ?
-    ORDER BY repo_states.name"""
+    WHERE sets.dist = ? AND sets.ref = ?
+    ORDER BY name"""
     FETCH_REPO_STATE_QUERY = """
-    SELECT id, package_descriptors
+    SELECT id, metadata, package_descriptors
     FROM repo_states
     WHERE name = ? AND type = ? AND url = ? AND version = ?"""
     INSERT_SET_QUERY = """
-    INSERT INTO sets (dist, name, last_updated) VALUES (?, ?, ?)"""
+    INSERT INTO sets (dist, ref, last_updated) VALUES (?, ?, ?)"""
     INSERT_REPO_STATE_QUERY = """
-    INSERT INTO repo_states (name, type, url, version, package_descriptors) VALUES (?, ?, ?, ?, ?)"""
+    INSERT INTO repo_states (name, type, url, version, metadata, package_descriptors) VALUES (?, ?, ?, ?, ?, ?)"""
     INSERT_SET_REPO_STATES_QUERY = """
     INSERT INTO set_repo_states (set_id, repo_state_id) VALUES (?, ?)"""
 
@@ -48,7 +61,7 @@ class Database:
             self.initialize(filepath)
         self.connection = Connection(filepath, self.connect_fn)
 
-    def initialize(self, filepath):
+    def initialize(self, filepath: str) -> None:
         """
         Initializes a new empty database; this only ever happens at startup, so we
         just do it synchronously.
@@ -59,52 +72,82 @@ class Database:
         db.commit()
         db.close()
 
-    async def connect_fn(self, db):
+    async def connect_fn(self, db) -> None:
         """
         Callback function for anything we'd like to execute on a newly-opened database connection.
         """
         await db.execute(self.PRAGMA_FOREIGN_KEYS)
 
-    async def fetch_set(self, dist_name, name):
+    async def fetch_set(self, dist_name: str, ref: str) -> Iterable[RepositoryDescriptor]:
         """
-        Return either a full set of repo_state rows if the set is in the
-        database, or the empty set if it is not.
+        Return either an iterable of RepositoryDescriptor objects if the set is in the
+        database, or raise RepositorySetNotFound if it is not.
         """
         async with self.connection() as db:
-            await db.execute(self.FETCH_SET_QUERY, (dist_name, name))
-            cursor = await db.execute(self.FETCH_SET_QUERY, (dist_name, name))
-            return await cursor.fetchall()
+            await db.execute(self.FETCH_SET_QUERY, (dist_name, ref))
+            cursor = await db.execute(self.FETCH_SET_QUERY, (dist_name, ref))
+            if all_data := await cursor.fetchall():
+                repository_descriptors = []
+                for data in all_data:
+                    desc = RepositoryDescriptor()
+                    desc.name = data[0]
+                    desc.type = data[1]
+                    desc.url = data[2]
+                    desc.version = data[3]
+                    desc.parse_packages_dicts(json.loads(data[4]))
+                    repository_descriptors.append(desc)
+                return repository_descriptors
+            else:
+                raise RepositorySetNotFound
 
-    async def fetch_repo_state(self, name, typename, url, version):
+    async def fetch_repo_state(self, desc: RepositoryDescriptor) -> None:
         """
-        Get a single repo state, returning a tuple that is the row id and json string,
-        or None if the row is not found.
+        Uses the identity fields in the passed-in descriptor to search for it in the
+        database. If found, the descriptor is populated with the row id and parsed
+        PackageDescriptors; it not found RepositoryNotFound is raised.
         """
+        query_args = desc.identity()
+        assert query_args
         async with self.connection() as db:
-            cursor = await db.execute(self.FETCH_REPO_STATE_QUERY, (name, typename, url, version))
+            cursor = await db.execute(self.FETCH_REPO_STATE_QUERY, query_args)
             result = await cursor.fetchall()
-            return result[0] if result else None
+            if result:
+                repo_state_id, metadata_str, packages_str = result[0]
+                desc.metadata = json.loads(metadata_str)
+                packages_dicts = json.loads(packages_str)
+                desc.parse_packages_dicts(packages_dicts)
+                desc.metadata['repo_state_id'] = repo_state_id
+            else:
+                raise RepositoryNotFound
 
-    async def insert_repo_state(self, name, typename, url, version, json_str):
+    async def insert_repo_state(self, desc: RepositoryDescriptor) -> None:
         """
-        Insert a repo state, returning the row id for it. If the row already exists,
-        this query will fail due to db constraints.
+        Insert a repo state, setting the repo_state_id in the descriptor's metadata dict.
+        If the row already exists, this query will fail due to db constraints.
         """
         async with self.connection() as db:
-            cursor = await db.execute(self.INSERT_REPO_STATE_QUERY, (name, typename, url, version, json_str))
-            row_id = cursor.lastrowid
+            query_args = (
+                desc.name,
+                desc.type,
+                desc.url,
+                desc.version,
+                json.dumps(desc.metadata),
+                json.dumps(desc.packages_dicts()),
+            )
+            cursor = await db.execute(self.INSERT_REPO_STATE_QUERY, query_args)
+            desc.metadata['repo_state_id'] = cursor.lastrowid
             await db.commit()
-        return row_id
 
-    async def insert_set(self, dist_name, name, repo_state_ids):
+    async def insert_set(self, dist_name: str, ref: str, repo_state_ids: Iterable[int]) -> None:
         """
         Insert a new set row from dist_name, name, and set of ids, all of which must
         exist in the repo states table or this query will fail due to db constraints.
         """
         async with self.connection() as db:
-            cursor = await db.execute(self.INSERT_SET_QUERY, (dist_name, name, None))
+            cursor = await db.execute(self.INSERT_SET_QUERY, (dist_name, ref, None))
             set_id = cursor.lastrowid
-            await db.executemany(self.INSERT_SET_REPO_STATES_QUERY, [(set_id, r) for r in repo_state_ids])
+            query_args = [(set_id, r) for r in repo_state_ids]
+            await db.executemany(self.INSERT_SET_REPO_STATES_QUERY, query_args)
             await db.commit()
 
 
