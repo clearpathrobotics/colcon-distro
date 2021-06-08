@@ -34,16 +34,16 @@ class RepositoryDescriptor:
         rd.version = source_dict['version']
         return rd
 
-    def parse_packages_dicts(self, packages_dicts: str):
+    def parse_packages_dicts(self, packages_dicts: list):
         """
-        Parses the passed-in packages_dicts string, and sets the packages list
-        to PackageDescriptor objects.
+        Parses the passed-in list of package dicts, and sets the packages list
+        to the corresponding PackageDescriptor objects.
         """
         self.packages = [descriptor_from_dict(pd) for pd in packages_dicts]
 
-    def packages_dicts(self):
+    def packages_dicts(self) -> list:
         """
-        Returns the packages field as a list of package dicts, ready to be
+        Returns the packages list as a list of package dicts, ready to be
         serialized either to database or in a JSON HTTP response.
         """
         assert self.packages is not None
