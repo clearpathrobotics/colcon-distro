@@ -1,3 +1,13 @@
+"""
+repository_augmentation
+=======================
+
+The purpose of this module is to expose a colcon extension point for augmenting
+:class:`colcon_distro.repository_descriptor.RepositoryDescriptor` objects with
+additional metadata. Some possible uses for this could include hashes of all or
+parts of the repository's contents, information about whether the repository
+includes things like docs, tests, etc.
+"""
 import traceback
 
 from colcon_core.logging import colcon_logger
@@ -35,7 +45,7 @@ class RepositoryAugmentationExtensionPoint:
         :param path: Path to the repository.
         :param metadata: Dict on which to set metadata.
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 def get_repository_augmentation_extensions():
@@ -47,7 +57,10 @@ def get_repository_augmentation_extensions():
 
 
 def augment_repository(repository_descriptor: RepositoryDescriptor):
-    """Augment the pass repository and return the metadata dict."""
+    """
+    Augment the passed repository, populating its metadata dict according
+    to available plugins.
+    """
     logger.debug(f"augment_repository called for {repository_descriptor.path}")
     # apply extension augmentations in priority order
     extensions = get_repository_augmentation_extensions()

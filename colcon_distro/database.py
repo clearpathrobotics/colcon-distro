@@ -1,4 +1,11 @@
+"""
+database
+========
 
+This module provides classes which are the interface to the underlying SQLite database,
+including multiplexing the connection across the different concurrent async activities,
+and also wrapping queries with a basic method interface.
+"""
 import aiosqlite
 import asyncio
 import contextlib

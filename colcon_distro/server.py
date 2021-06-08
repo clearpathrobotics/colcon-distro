@@ -1,3 +1,12 @@
+"""
+server
+======
+
+This module has the ``main()`` that is the server process's entry point as
+well as argument parsing and the rest of the Sanic interface, like
+route handlers.
+"""
+
 import argparse
 import asyncio
 import logging

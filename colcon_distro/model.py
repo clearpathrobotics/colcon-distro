@@ -1,3 +1,10 @@
+"""
+model
+=====
+
+This module provides the Model class, which is the main entry point to the
+backend of colcon-distro.
+"""
 import asyncio
 import functools
 import logging
@@ -51,14 +58,16 @@ class Model:
 
     def remember_progress(fn):
         """
-        This decorator memoizes the coroutines below by wrapping them in futures and storing
-        the result in a dictionary keyed to their name and arguments. The dict entry is cleared
-        as soon as the future completes because at that point the content is in the database
-        and would be retrieved from there anyway on successive calls.
+        This decorator memoizes a coroutine by wrapping it in a future and storing the result
+        in a dictionary keyed to the name and arguments. The dict entry is cleared as soon as
+        the future completes because at that point the content is in the database and would be
+        retrieved from there anyway on successive calls.
 
         The idea here is that if multiple calls for the same (or overlapping) snapshots come in
         concurrently, we don't do the same work twice. And more importantly, we don't violate
         uniqueness constraints in the database by inserting the same results multiple times.
+
+        :param fn: coroutine to wrap in a future
         """
 
         @functools.wraps(fn)
@@ -81,8 +90,8 @@ class Model:
         and falling back to building up manually if required, after which it is saved
         in the database and returned.
 
-        :param: dist_name name of the distribution (eg, noetic)
-        :param: ref version control reference to fetch (currently only frozen tags and
+        :param dist_name: name of the distribution (eg, noetic)
+        :param ref: version control reference to fetch (currently only frozen tags and
             snapshots are supported).
         """
         # Trim the ref prefix if included.
@@ -131,12 +140,15 @@ class Model:
         return repository_descriptors
 
     @remember_progress
-    async def get_repo_state(self, repository_descriptor):
+    async def get_repo_state(self, repository_descriptor: RepositoryDescriptor):
         """
         Populates the passed repository_descriptor with PackageDescriptor instances
         in the packages set, and a repo_state_id field in the metadata dict. This may happen
         because all of the information was in the cache, or some or all of it may have
         to have been pulled from the original source.
+
+        :param repository_descriptor: The descriptor object to populate with information
+            about its state. Must include name, type, url, and version fields.
         """
 
         # The descriptor passed must have name and source info.
