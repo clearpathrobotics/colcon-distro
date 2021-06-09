@@ -1,3 +1,13 @@
+"""
+download
+========
+
+This module provides classes related to efficiently accessing content from
+remote repositories, including whole tarball downloads, individual files,
+etc. Because there is no standard for this type of access, individual
+implementations are present for Github, GitLab, and the local filesystem;
+more could easily be added.
+"""
 import asyncio
 import contextlib
 import httpx
@@ -20,8 +30,6 @@ class DownloadError(Exception):
     """
     pass
 
-
-# TODO: Consider replacing the curl subprocess stuff with RPC calls to a aria2 daemon.
 
 class GitTarballDownloader:
     """
@@ -243,8 +251,10 @@ class GitLocalFileDownloader:
 class GitRev:
     """
     This class supplies asynchronous methods to download/access the contents of a remote or
-    local git repo at a specific ref, choosing an appropriate backend depending on the URL
-    that is passed into the constructor (eg, GitLab vs GitHub vs git).
+    local git repo at a specific ref, choosing an appropriate backend depending on the ``url``
+    field of the repository descriptor that is passed into the constructor. The options at
+    present are GitLab and Github, with some limited support for a local git clone (enough
+    to use it as the rosdistro repo).
     """
     URL_REGEX = re.compile(r'(?:\w+:\/\/|git@)(?P<server>[\w.-]+)[:/](?P<repo_path>[\w/-]*)(?:\.git)?$')
     URL_DOWNLOADERS = [GitLabDownloader, GithubDownloader]

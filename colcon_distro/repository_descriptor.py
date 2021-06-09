@@ -1,13 +1,35 @@
+"""
+repository_descriptor
+=====================
+
+This module provides the RepositoryDescriptor class, which is a data container
+for repository-level data.
+"""
 from .package import descriptor_to_dict, descriptor_from_dict
 
 
 class RepositoryDescriptor:
+    """
+    A descriptor for a repository at a moment in time. The identification items
+    are the ``name``, ``type`` (eg ``git``), ``url``, and ``version`` (a tag or
+    hash), all of which typically come from a rosdistro source entry. The
+    remaining items are ``path``, which may be populated if the repo's contents
+    are available on the filesystem (via checkout or tarball extraction);
+    ``packages``, which is a list of PackageDescriptor objects; and ``metadata``,
+    which is a dict that may be used for storing additional information.
+
+    Similar to PackageDescriptor from colcon-core, this class is
+    intentionally light on implementation. It is meant to be a data container
+    that is passed around and acted on by other modules, rather than supplying
+    its own suite of methods.
+    """
+
     __slots__ = (
-        'path',
         'name',
         'type',
         'url',
         'version',
+        'path',
         'packages',
         'metadata',
     )

@@ -1,3 +1,12 @@
+"""
+discovery
+=========
+
+Helper functions for :class:`colcon_distro.model.Model` which assist with calling
+into the discovery mechanisms in `colcon-core`_.
+
+.. _colcon-core: https://github.com/colcon/colcon-core
+"""
 from colcon_core.package_augmentation import augment_packages
 from colcon_core.package_discovery import discover_packages
 from colcon_core.package_identification import get_package_identification_extensions
