@@ -4,6 +4,10 @@ import requests
 from .package import descriptor_from_dict
 
 
+class GeneratorError(RuntimeError):
+    pass
+
+
 class Generator:
     def __init__(self, repositories_dict):
         self.repositories = repositories_dict
@@ -11,11 +15,18 @@ class Generator:
         self.requested_packages = {}
 
     @classmethod
-    def from_url_cache(cls, cache_url, rosdistro, ref):
-        # TODO: Add some error handling/recovery here.
-        assert cache_url
+    def from_url_cache(cls, cache_url: str, rosdistro: str, ref: str):
+        if not cache_url:
+            raise GeneratorError("The cache URL must be supplied.")
+        if not (rosdistro and ref):
+            raise GeneratorError("The rosdistro name and git ref must be supplied.")
         url = f'{cache_url}/get/{rosdistro}/{ref}.json'
-        return cls(requests.get(url).json()['repositories'])
+        response = requests.get(url)
+        if not response.ok:
+            raise GeneratorError(
+                f"Unable to fetch from {cache_url}, got HTTP {response.status_code}.")
+        response_json = response.json()
+        return cls(response_json['repositories'])
 
     def _all_packages(self):
         for repo_name, repo_dict in self.repositories.items():

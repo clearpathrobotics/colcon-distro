@@ -32,8 +32,13 @@ class GenerateVerb(VerbExtensionPoint):
             return 1
 
         # Lazy import this so we don't pay the cost when the verb isn't invoked.
-        from colcon_distro.generate import Generator
-        generator = Generator.from_url_cache(args.colcon_cache, args.rosdistro, args.ref)
+        from colcon_distro.generate import Generator, GeneratorError
+        try:
+            generator = Generator.from_url_cache(args.colcon_cache, args.rosdistro, args.ref)
+        except GeneratorError as e:
+            self.logger.error(f"Unable to generate workspace: {e}")
+            return 1
+
         descriptors = generator.descriptor_set(*args.pkgs, deps=args.deps)
 
         output_dict = {
