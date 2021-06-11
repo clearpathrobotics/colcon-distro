@@ -6,13 +6,13 @@ This module provides the Model class, which is the main entry point to the
 backend of colcon-distro.
 """
 import asyncio
-import functools
 import logging
 import yaml
 
 from .database import RepositoryNotFound, RepositorySetNotFound
 from .discovery import discover_augmented_packages
 from .download import GitRev, DownloadError
+from .memoize import remember_progress
 from .repository_augmentation import augment_repository
 from .repository_descriptor import RepositoryDescriptor
 
@@ -28,18 +28,6 @@ class ModelError(RuntimeError):
     pass
 
 
-class ModelInternalError(ModelError):
-    """
-    Exception for errors which are the result of bugs, for example database
-    queries which fail due to consistency checks.
-    """
-    pass
-
-# TODO: It would be great to support a distro that's just a directory of files or a locally-
-# modified checkout, rather than needing to be on a known git host. This may require pulling
-# some of that logic into a dedicated Distro class.
-
-
 class Model:
     """
     This class provides the high level interface which may be queried for repo sets.
@@ -51,37 +39,9 @@ class Model:
     def __init__(self, config, db):
         self.config = config
         self.db = db
-        self.in_progress = {}
 
         # Limit how much work we try to do at once.
         self.semaphore = None
-
-    def remember_progress(fn):
-        """
-        This decorator memoizes a coroutine by wrapping it in a future and storing the result
-        in a dictionary keyed to the name and arguments. The dict entry is cleared as soon as
-        the future completes because at that point the content is in the database and would be
-        retrieved from there anyway on successive calls.
-
-        The idea here is that if multiple calls for the same (or overlapping) snapshots come in
-        concurrently, we don't do the same work twice. And more importantly, we don't violate
-        uniqueness constraints in the database by inserting the same results multiple times.
-
-        :param fn: coroutine to wrap in a future
-        """
-
-        @functools.wraps(fn)
-        async def wrapper(self, *args):
-            ident = (fn.__name__, *args)
-
-            async def _initial():
-                self.in_progress[ident] = asyncio.ensure_future(fn(self, *args))
-                try:
-                    return await self.in_progress[ident]
-                finally:
-                    del self.in_progress[ident]
-            return await (self.in_progress.get(ident) or _initial())
-        return wrapper
 
     @remember_progress
     async def get_set(self, dist_name, ref):

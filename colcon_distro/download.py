@@ -9,13 +9,15 @@ implementations are present for Github, GitLab, and the local filesystem;
 more could easily be added.
 """
 import asyncio
+from abc import ABC, abstractmethod
 import contextlib
 import httpx
 import re
 import logging
 import os
-import pathlib
+from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Dict, Iterable, Optional
 import urllib.parse
 
 from .repository_descriptor import RepositoryDescriptor
@@ -24,18 +26,50 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-class DownloadError(Exception):
+class DownloadError(RuntimeError):
     """
     General exception for download-related errors.
     """
     pass
 
 
-class GitTarballDownloader:
+class GitDownloader(ABC):
+    """
+    This abstract class supplies the interface for the host-specific implementations that
+    are used by :class:`GitRev`.
+    """
+
+    @abstractmethod
+    async def get_file(self, path: Path) -> bytes:
+        """
+        Returns contents of a single file from a git remote, using if possible
+        a host-specific API that is faster than simply cloning the repo.
+
+        :param path: path of file within repo to fetch.
+        """
+        pass
+
+    @abstractmethod
+    async def download_all_to(self, path: Path,
+                              limit_paths: Optional[Iterable[Path]] = None) -> None:
+        """
+        Download contents of repository at the specified ref.
+
+        :param path: location on filesystem to extract/copy/clone contents to.
+        :param limit_paths: if supplied, only these paths within the repository will
+            be extracted. This may be used to only copy certain packages for a workspace.
+        """
+        pass
+
+
+class GitHostTarballDownloader(GitDownloader):
     """
     Generic tarball downloader which is lightly specialized in subclasses for specific hosts.
     """
-    headers = {}
+    headers: Dict[str, str] = {}
+    SERVER_REGEX: re.Pattern
+    BASE_URL: str
+    TARBALL_PATH: str
 
     def __init__(self, **args):
         self.__dict__.update(args)
@@ -222,13 +256,13 @@ def _find_files_from_git_attributes(attributes_filepath, filter_type="lfs"):
             yield from attributes_filepath.parent.glob(git_glob)
 
 
-class GithubDownloader(GitTarballDownloader):
+class GithubDownloader(GitHostTarballDownloader):
     SERVER_REGEX = re.compile(r'^github\.com')
     BASE_URL = 'https://{server}'
     TARBALL_PATH = '{repo_path}/archive/{version}.tar.gz'
 
 
-class GitLabDownloader(GitTarballDownloader):
+class GitLabDownloader(GitHostTarballDownloader):
     SERVER_REGEX = re.compile(r'^gitlab\.')
     BASE_URL = 'http://{server}'
     TARBALL_PATH = 'api/v4/projects/{repo_path_quoted}/repository/archive.tar.gz?sha={version}'
@@ -236,7 +270,7 @@ class GitLabDownloader(GitTarballDownloader):
     headers = {'Private-Token': os.environ.get('GITLAB_PRIVATE_TOKEN', '')}
 
 
-class GitLocalFileDownloader:
+class GitLocalFileDownloader(GitDownloader):
     def __init__(self, repo_path, version):
         self.repo_path = repo_path
 
@@ -246,6 +280,9 @@ class GitLocalFileDownloader:
             *git_cmd, cwd=self.repo_path, stdout=asyncio.subprocess.PIPE)
         stdout, stderr = await git_proc.communicate()
         return stdout
+
+    async def download_all_to(self, path, limit_paths=None):
+        raise NotImplementedError
 
 
 class GitRev:
@@ -262,18 +299,19 @@ class GitRev:
 
     def __init__(self, repository_descriptor: RepositoryDescriptor):
         self.descriptor = repository_descriptor
+        self.downloader: GitDownloader
         if match := self.URL_REGEX.match(self.descriptor.url):
             # Recognized remote hosts (Github, GitLab)
-            self.__dict__.update(match.groupdict())
+            self.server = match.group('server')
+            self.repo_path = match.group('repo_path')
             for dl_cls in self.URL_DOWNLOADERS:
                 if dl_cls.SERVER_REGEX.match(self.server):
-                    self.downloader = dl_cls(server=self.server,
-                                             repo_path=self.repo_path,
-                                             version=self.descriptor.version)
+                    self.downloader = dl_cls(
+                        server=self.server, repo_path=self.repo_path, version=self.descriptor.version)
                     break
         elif match := self.FILE_REGEX.match(self.descriptor.url):
             # Repo on the local filesystem
-            self.__dict__.update(match.groupdict())
+            self.repo_path = match.group('repo_path')
             self.downloader = GitLocalFileDownloader(repo_path=self.repo_path,
                                                      version=self.descriptor.version)
         else:
@@ -284,7 +322,7 @@ class GitRev:
         dirname = f"colcon-distro--{self.repo_path.replace('/', '-')}--"
         with TemporaryDirectory(prefix=dirname, dir="/var/tmp") as tempdir:
             self.descriptor.path = tempdir
-            await self.downloader.download_all_to(pathlib.Path(tempdir))
+            await self.downloader.download_all_to(Path(tempdir))
             yield
             self.descriptor.path = None
 

@@ -4,6 +4,7 @@ include:
     - pages.yml
     - python.yml
     - lint/flake8.yml
+    - lint/mypy.yml
 
 nose:
   before_script:
