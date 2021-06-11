@@ -20,12 +20,7 @@ fetch the repo states it doesn't know about yet.
 .. automodule:: colcon_distro.model
 
     .. autoclass:: Model
-
-        .. autodecorator:: colcon_distro.model.Model.remember_progress
-
-        .. autocomethod:: Model.get_set
-
-        .. autocomethod:: Model.get_repo_state
+        :members:
 
 .. automodule:: colcon_distro.repository_augmentation
     :members:
@@ -33,6 +28,9 @@ fetch the repo states it doesn't know about yet.
 .. automodule:: colcon_distro.download
 
     .. autoclass:: GitRev
+        :members:
+
+    .. autoclass:: GitDownloader
         :members:
 
 .. automodule:: colcon_distro.discovery

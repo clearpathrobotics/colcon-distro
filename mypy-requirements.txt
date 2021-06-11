@@ -1,0 +1,4 @@
+types-pkg-resources
+types-PyYAML
+types-requests
+types-toml
