@@ -122,138 +122,18 @@ class GitHostTarballDownloader(GitDownloader):
     async def download_all_to(self, path, limit_paths=None):
         """
         Unlike the plain tarball downloader, this also unpacks the result, and can
-        therefore do extra stuff like fetch submodules and LFS objects.
+        therefore do extra stuff like fetch submodules.
         """
         # Download and extract the main repo archive.
-        tar_output = await self.extract_tarball_to(path, limit_paths)
+        await self.extract_tarball_to(path, limit_paths)
         logger.info(f"> {self.version} {self.repo_path} [archive]")
 
-        # Scan the list of extracted files for .gitattributes which may signal the presence
-        # of LFS objects which need to be retrieved.
-        git_attributes_filepaths = list(_find_files_in_list(path, tar_output, '.gitattributes'))
-        if git_attributes_filepaths:
-            if lfs_object_dict := dict(self.get_lfs_objects(git_attributes_filepaths)):
-                await self.download_all_lfs(lfs_object_dict)
-                lfs_count = len(lfs_object_dict)
-                logger.info(f"> {self.version} {self.repo_path} [{lfs_count} LFS object(s)]")
         # TODO: Scan for .gitmodules, and if found, recursively instantiate GitRevs for them
         # so that they also can be download_all_to'd the correct paths.
-
-    def get_lfs_objects(self, git_attributes_filepaths):
-        """
-        Open all files matching the gitattributes globs. Generate nested tuples which
-        can become a dict mapping the special LFS hashes back to their actual filenames
-        and sizes.
-
-        This function is synchronous simply because the LFS metadata files are very
-        small and it doesn't seem worth pushing this work off to an executor thread.
-        """
-        for attributes_filepath in git_attributes_filepaths:
-            for lfs_filepath in _find_files_from_git_attributes(attributes_filepath):
-                # The lfs_filepath is absolute, since it comes assembled to the
-                # absolute path of the gitattributes file which identified it.
-                with open(lfs_filepath, 'rb') as f:
-                    if f.readline() != b'version https://git-lfs.github.com/spec/v1\n':
-                        return
-                    match = re.match(b"oid sha256:([0-9a-f]+)\nsize ([0-9]+)", f.read(), re.MULTILINE)
-                    if not match:
-                        raise DownloadError(f"Unable to parse LFS information for {lfs_filepath}")
-                    lfs_sha = match.group(1).decode()
-                    lfs_size = int(match.group(2))
-                    yield lfs_sha, (lfs_filepath, lfs_size)
-
-    async def download_all_lfs(self, lfs_object_dict):
-        """
-        Git LFS puts marker files in the actual repo, and those markers contain a hash
-        which may be used to get an actual download link and authorization code from a
-        separate Git LFS server. Since this may be batched, we only make a single request
-        which gets us all LFS download links in a single go.
-        """
-        def _get_lfs_request(lfs_object_dict):
-            """
-            Consumes the dict from the above function and returns the JSON-ready object
-            structure which is expected by the LFS server.
-            """
-            def _object_list():
-                for lfs_sha, (lfs_filepath, lfs_size) in lfs_object_dict.items():
-                    yield {"oid": lfs_sha, "size": lfs_size}
-            return {
-                "operation": "download",
-                "objects": list(_object_list()),
-                "transfers": ["lfs-standalone-file", "basic"],
-                "ref": {"name": self.version}
-            }
-
-        # Auth for the LFS server is slightly different than main GitLab.
-        auth = ('oauth2', self.headers['Private-Token'])
-        url = f'{self.base_url}/{self.repo_path}.git/info/lfs/objects/batch'
-
-        # This is where we scan for objects in the repo which must be downloaded
-        # from LFS, and sent off a list of them to the server.
-        request_json = _get_lfs_request(lfs_object_dict)
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, auth=auth, json=request_json)
-
-        # Now we have the URLs and auth codes, build up a cURL request to grab
-        # them all.
-        curl_config = []
-        lfs_objs = response.json()['objects']
-        for k, v in lfs_objs[0]['actions']['download']['header'].items():
-            curl_config.append(f"header = \"{k}: {v}\"")
-        for obj in lfs_objs:
-            lfs_filepath, lfs_size = lfs_object_dict[obj['oid']]
-            dl = obj['actions']['download']
-            curl_config.append(f"output = {lfs_filepath}")
-            curl_config.append(f"url = {dl['href']}")
-
-        curl_proc = await asyncio.create_subprocess_exec(
-            'curl', '-K', '-',
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE)
-        curl_stdout, curl_stderr = await curl_proc.communicate('\n'.join(curl_config).encode())
-        if curl_proc.returncode != 0:
-            raise DownloadError("LFS download failed.")
-
-        for obj in lfs_objs:
-            lfs_filepath, lfs_size = lfs_object_dict[obj['oid']]
-            actual_size = lfs_filepath.stat().st_size
-            if actual_size != lfs_size:
-                msg = f"LFS file {lfs_filepath} expected size {lfs_size}, actual {actual_size}."
-                raise DownloadError(msg)
 
     async def get_file(self, path):
         async with self.stream_repo_file(path) as response:
             return await response.aread()
-
-
-def _find_files_in_list(path, file_list, name):
-    """
-    Scans a list of files (eg, from tar output) looking for instances
-    of a specific filename.
-    """
-    for line in file_list:
-        if line.endswith(name):
-            yield path / line.strip()
-
-
-def _find_files_from_git_attributes(attributes_filepath, filter_type="lfs"):
-    """
-    This is a naive implementation of the git globbing rules, see:
-    https://git-scm.com/docs/gitattributes
-    https://git-scm.com/docs/gitignore
-    """
-    with open(attributes_filepath, 'r') as f:
-        attributes_contents = f.read()
-    for attributes_line in attributes_contents.splitlines():
-        if attributes_line.startswith('#'):
-            continue
-        line_parts = attributes_line.split()
-        if f'filter={filter_type}' in line_parts:
-            git_glob = line_parts[0]
-            if os.path.sep not in git_glob:
-                git_glob = f"**/{git_glob}"
-            yield from attributes_filepath.parent.glob(git_glob)
 
 
 class GithubDownloader(GitHostTarballDownloader):
