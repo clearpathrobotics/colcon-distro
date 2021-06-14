@@ -45,7 +45,7 @@ class Database:
     SCHEMA_SCRIPT = "schema.sql"
     PRAGMA_FOREIGN_KEYS = "PRAGMA foreign_keys=1"
     FETCH_SET_QUERY = """
-    SELECT name, type, url, version, package_descriptors
+    SELECT name, type, url, version, metadata, package_descriptors
     FROM repo_states
     JOIN set_repo_states ON repo_states.id = set_repo_states.repo_state_id
     JOIN sets ON set_repo_states.set_id == sets.id
@@ -63,7 +63,8 @@ class Database:
     INSERT INTO set_repo_states (set_id, repo_state_id) VALUES (?, ?)"""
 
     def __init__(self, config):
-        filepath = config.get_database_filepath()
+        self.config = config
+        filepath = self.config.get_database_filepath()
         if not filepath.exists():
             self.initialize(filepath)
         self.connection = Connection(filepath, self.connect_fn)
@@ -101,7 +102,10 @@ class Database:
                     desc.type = data[1]
                     desc.url = data[2]
                     desc.version = data[3]
-                    desc.parse_packages_dicts(json.loads(data[4]))
+                    metadata_str = data[4]
+                    if metadata_str != "":
+                        desc.metadata = json.loads(metadata_str)
+                    desc.parse_packages_dicts(json.loads(data[5]))
                     repository_descriptors.append(desc)
                 return repository_descriptors
             else:
@@ -132,6 +136,7 @@ class Database:
         Insert a repo state, setting the repo_state_id in the descriptor's metadata dict.
         If the row already exists, this query will fail due to db constraints.
         """
+        mi = self.config.get_metadata_inclusions()
         async with self.connection() as db:
             query_args = (
                 desc.name,
@@ -139,7 +144,7 @@ class Database:
                 desc.url,
                 desc.version,
                 json.dumps(desc.metadata),
-                json.dumps(desc.packages_dicts()),
+                json.dumps(desc.packages_dicts(mi)),
             )
             cursor = await db.execute(self.INSERT_REPO_STATE_QUERY, query_args)
             desc.metadata['repo_state_id'] = cursor.lastrowid

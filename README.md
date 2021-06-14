@@ -34,3 +34,15 @@ to be manually fetched, as `git clone` won't include them by default:
 ```
 git fetch origin +refs/snapshot/*:refs/snapshot/* | tail
 ```
+
+You can also specify augmented package- and repository descriptor metadata to include, with:
+
+```
+[cache]
+metadata_inclusions = [ 'narhash' ]
+```
+
+This will have no effect unless [colcon-nix][cn] is also installed in the same environment,
+as it includes the extensions to actually populate that metadata field.
+
+[cn]: http://gitlab.clearpathrobotics.com/tools/colcon-nix

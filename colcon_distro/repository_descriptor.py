@@ -56,6 +56,20 @@ class RepositoryDescriptor:
         rd.version = source_dict['version']
         return rd
 
+    def to_dict(self, metadata_inclusions=None):
+        repo_dict = {
+            'type': self.type,
+            'url': self.url,
+            'version': self.version,
+            'packages': self.packages_dicts(metadata_inclusions)
+        }
+        if metadata_inclusions is not None:
+            repo_dict['metadata'] = {}
+            for meta_name, meta_value in self.metadata.items():
+                if meta_name in metadata_inclusions:
+                    repo_dict['metadata'][meta_name] = meta_value
+        return repo_dict
+
     def parse_packages_dicts(self, packages_dicts: list):
         """
         Parses the passed-in list of package dicts, and sets the packages list
@@ -63,13 +77,13 @@ class RepositoryDescriptor:
         """
         self.packages = [descriptor_from_dict(pd) for pd in packages_dicts]
 
-    def packages_dicts(self) -> list:
+    def packages_dicts(self, metadata_inclusions=None) -> list:
         """
         Returns the packages list as a list of package dicts, ready to be
         serialized either to database or in a JSON HTTP response.
         """
         assert self.packages is not None
-        return [descriptor_to_dict(pd) for pd in self.packages]
+        return [descriptor_to_dict(pd, metadata_inclusions) for pd in self.packages]
 
     def identity(self):
         """
