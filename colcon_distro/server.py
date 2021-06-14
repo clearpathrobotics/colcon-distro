@@ -43,15 +43,11 @@ async def get_response_dict(model, dist, ref):
     except ModelError as e:
         raise sanic.exceptions.NotFound(str(e))
 
+    mi = app.ctx.model.config.get_metadata_inclusions()
+
     def repo_states_items():
         for desc in repository_descriptors:
-            repo_dict = {
-                'type': desc.type,
-                'url': desc.url,
-                'version': desc.version,
-                'packages': desc.packages_dicts()
-            }
-            yield desc.name, repo_dict
+            yield desc.name, desc.to_dict(mi)
     # Include the original request information in the response to facilitate using
     # this result with an import workflow (not yet implemented).
     return {

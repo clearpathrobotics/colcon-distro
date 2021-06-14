@@ -40,6 +40,14 @@ class Config:
                 pass
         return self.DEFAULT_PARALLELISM
 
+    def get_metadata_inclusions(self):
+        if self.toml:
+            try:
+                return set(self.toml['cache']['metadata_inclusions'])
+            except KeyError:
+                pass
+        return set()
+
 
 def add_config_args(argparser):
     argparser.add_argument("-c", "--config-file")
