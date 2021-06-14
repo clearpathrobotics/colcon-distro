@@ -9,6 +9,7 @@ def _dummy():
     d.type = 'git'
     d.url = 'path/to/server'
     d.version = '1.2.3'
+    d.packages = []
     return d
 
 
@@ -37,3 +38,25 @@ class RepositoryDescriptorTests(unittest.TestCase):
         c.name = "bar"
         repo_set = set((a, b, c))
         self.assertEqual(len(repo_set), 2)
+
+    def test_dict(self):
+        a = _dummy()
+        a.metadata = {
+            'foo': 'bar',
+            'baz': 123,
+        }
+        self.assertEqual(a.to_dict(), {
+            'type': 'git',
+            'url': 'path/to/server',
+            'version': '1.2.3',
+            'packages': []
+        })
+        self.assertEqual(a.to_dict(['foo']), {
+            'type': 'git',
+            'url': 'path/to/server',
+            'version': '1.2.3',
+            'metadata': {
+                'foo': 'bar',
+            },
+            'packages': []
+        })
