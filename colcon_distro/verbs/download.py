@@ -5,6 +5,7 @@ from colcon_core.executor import add_executor_arguments
 from colcon_core.executor import execute_jobs
 from colcon_core.executor import Job
 from colcon_core.executor import OnError
+from colcon_distro.repository_descriptor import RepositoryDescriptor
 
 import os
 import pathlib
@@ -28,7 +29,11 @@ class DownloadVerb(VerbExtensionPoint):
             package_paths = [p['path'] for p in spec['packages'].values()]
             path = self.context.src_path / self.context.repo_name
             path.mkdir(parents=True, exist_ok=True)
-            gitrev = GitRev(spec['url'], spec['version'])
+            distro_descriptor = RepositoryDescriptor()
+            distro_descriptor.url = spec['url']
+            distro_descriptor.type = 'git'
+            distro_descriptor.version = spec['version']
+            gitrev = GitRev(distro_descriptor)
             await gitrev.downloader.download_all_to(path, limit_paths=package_paths)
 
     def __init__(self):  # noqa: D107
