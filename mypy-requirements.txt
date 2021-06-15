@@ -2,3 +2,4 @@ types-pkg-resources
 types-PyYAML
 types-requests
 types-toml
+-r test/requirements.txt

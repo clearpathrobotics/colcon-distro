@@ -1,0 +1,3 @@
+# Pending merge and release of: https://github.com/colcon/colcon-notification/pull/52
+https://github.com/mikepurvis/colcon-notification/archive/refs/heads/decorate-enabled-guard.tar.gz#egg=colcon-notification
+responses
