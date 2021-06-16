@@ -180,6 +180,7 @@ class GitRev:
     def __init__(self, repository_descriptor: RepositoryDescriptor):
         self.descriptor = repository_descriptor
         self.downloader: GitDownloader
+        assert self.descriptor.url
         if match := self.URL_REGEX.match(self.descriptor.url):
             # Recognized remote hosts (Github, GitLab)
             self.server = match.group('server')
@@ -201,8 +202,8 @@ class GitRev:
     async def tempdir_download(self):
         dirname = f"colcon-distro--{self.repo_path.replace('/', '-')}--"
         with TemporaryDirectory(prefix=dirname, dir="/var/tmp") as tempdir:
-            self.descriptor.path = tempdir
-            await self.downloader.download_all_to(Path(tempdir))
+            self.descriptor.path = Path(tempdir)
+            await self.downloader.download_all_to(self.descriptor.path)
             yield
             self.descriptor.path = None
 
