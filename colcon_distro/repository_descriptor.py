@@ -5,7 +5,12 @@ repository_descriptor
 This module provides the RepositoryDescriptor class, which is a data container
 for repository-level data.
 """
+from colcon_core.package_descriptor import PackageDescriptor
 from .package import descriptor_to_dict, descriptor_from_dict
+
+from operator import itemgetter
+from pathlib import Path
+from typing import List, Optional, Set
 
 
 class RepositoryDescriptor:
@@ -35,12 +40,12 @@ class RepositoryDescriptor:
     )
 
     def __init__(self):
-        self.path = None
-        self.name = None
-        self.type = None
-        self.url = None
-        self.version = None
-        self.packages = None
+        self.path: Optional[Path] = None
+        self.name: Optional[str] = None
+        self.type: Optional[str] = None
+        self.url: Optional[str] = None
+        self.version: Optional[str] = None
+        self.packages: Optional[Set[PackageDescriptor]] = None
         self.metadata = {}
 
     @classmethod
@@ -70,20 +75,22 @@ class RepositoryDescriptor:
                     repo_dict['metadata'][meta_name] = meta_value
         return repo_dict
 
-    def parse_packages_dicts(self, packages_dicts: list):
+    def parse_packages_dicts(self, packages_dicts: List[dict]):
         """
         Parses the passed-in list of package dicts, and sets the packages list
         to the corresponding PackageDescriptor objects.
         """
-        self.packages = [descriptor_from_dict(pd) for pd in packages_dicts]
+        self.packages = set(descriptor_from_dict(pd) for pd in packages_dicts)
 
-    def packages_dicts(self, metadata_inclusions=None) -> list:
+    def packages_dicts(self, metadata_inclusions=None) -> List[dict]:
         """
         Returns the packages list as a list of package dicts, ready to be
         serialized either to database or in a JSON HTTP response.
         """
         assert self.packages is not None
-        return [descriptor_to_dict(pd, metadata_inclusions) for pd in self.packages]
+        pds = [descriptor_to_dict(pd, metadata_inclusions) for pd in self.packages]
+        pds.sort(key=itemgetter('name'))
+        return pds
 
     def identity(self):
         """
