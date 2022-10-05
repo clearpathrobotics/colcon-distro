@@ -1,1 +1,4 @@
+pytest
+sphinx
+sphinx_rtd_theme
 sphinxcontrib-asyncio

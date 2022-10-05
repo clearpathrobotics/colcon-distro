@@ -1,7 +1,7 @@
 """Basic configuration for Sphinx documentation."""
 
 project = 'colcon-distro'
-copyright = '2021 Clearpath'
+copyright = '2022 Clearpath'
 author = 'Mike Purvis'
 release = ''
 html_theme = 'sphinx_rtd_theme'

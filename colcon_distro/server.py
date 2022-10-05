@@ -20,7 +20,7 @@ from .model import Model, ModelError
 from .vendor.compress import Compress
 
 
-app = sanic.Sanic(__name__)
+app = sanic.Sanic("colcon-distro-server")
 
 # We deal in single requests; there's no advantage in having the client
 # hold the connection open.
