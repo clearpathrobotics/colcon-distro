@@ -88,8 +88,9 @@ class Model:
             def _get_repo_states():
                 """ Generate getter coroutines for all repo states. """
                 for repo_name, repo_dict in distro_dict['repositories'].items():
-                    desc = RepositoryDescriptor.from_distro(repo_name, repo_dict['source'])
-                    yield self.get_repo_state(desc)
+                    if 'source' in repo_dict:
+                        desc = RepositoryDescriptor.from_distro(repo_name, repo_dict['source'])
+                        yield self.get_repo_state(desc)
 
             logger.info(f"Preparing cache for {dist_name}:{ref}.")
             repository_descriptors = await asyncio.gather(*_get_repo_states())
@@ -126,9 +127,6 @@ class Model:
                     repository_descriptor.packages = \
                         discover_augmented_packages(repository_descriptor.path)
                     augment_repository(repository_descriptor)
-
-            if not repository_descriptor.packages:
-                raise ModelError(f"No packages discovered in {repository_descriptor.url}.")
 
             # Insert it as a new row, which will set the repo_state_id metadata on it.
             await self.db.insert_repo_state(repository_descriptor)

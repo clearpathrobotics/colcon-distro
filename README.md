@@ -9,9 +9,14 @@ Docs: https://colcon-distro.readthedocs.io
 Example configuration:
 
 ```
+[general]
+parallelism = 12
+
 [distro]
-repository = "https://github.com/clearpathrobotics/rosdistro-snapshots"
-distributions = ['noetic', 'rolling']
+repository = "https://github.com/clearpathrobotics/rosdistro-snapshots.git"
+distributions = [ 'noetic', 'rolling' ]
+branches = [ 'snapshot/latest' ]
+python_version = 3
 
 [database]
 filename = "/var/tmp/distro.db"
@@ -25,7 +30,7 @@ repository = "file:///home/administrator/rosdistro_internal"
 distributions = [ 'noetic' ]
 ```
 
-You can also specify augmented package- and repository descriptor metadata to include, with:
+You can also specify package- and repository descriptor metadata to include, with:
 
 ```
 [cache]
