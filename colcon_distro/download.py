@@ -68,8 +68,8 @@ class GitHostTarballDownloader(GitDownloader):
     """
     headers: Dict[str, str] = {}
     SERVER_REGEX: re.Pattern
-    BASE_URL: str
     TARBALL_PATH: str
+    BASE_URL :str = 'https://{server}'
 
     def __init__(self, **args):
         self.__dict__.update(args)
@@ -83,7 +83,7 @@ class GitHostTarballDownloader(GitDownloader):
         """
         url = f"{self.base_url}/{url_path}"
         async with httpx.AsyncClient() as client:
-            async with client.stream('GET', url, headers=self.headers) as response:
+            async with client.stream('GET', url, headers=self.headers, follow_redirects=True) as response:
                 if response.status_code != 200:
                     raise DownloadError(f"HTTP {response.status_code} fetching {url}")
                 yield response
@@ -114,7 +114,7 @@ class GitHostTarballDownloader(GitDownloader):
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         tar_stdout, tar_stderr = await tar_proc.communicate()
         if tar_proc.returncode != 0:
-            raise DownloadError("Archive download failed.")
+            raise DownloadError(f"Archive download failed from {self.base_url}/{url_path}")
         filelist = [line.decode().split(os.path.sep, maxsplit=1)[1]
                     for line in tar_stdout.splitlines()]
         return filelist
@@ -138,13 +138,18 @@ class GitHostTarballDownloader(GitDownloader):
 
 class GithubDownloader(GitHostTarballDownloader):
     SERVER_REGEX = re.compile(r'^github\.com')
-    BASE_URL = 'https://{server}'
     TARBALL_PATH = '{repo_path}/archive/{version}.tar.gz'
+    FILE_PATH = '{repo_path}/raw/{version}/{path}'
+
+
+class BitbucketDownloader(GitHostTarballDownloader):
+    SERVER_REGEX = re.compile(r'^bitbucket\.org')
+    TARBALL_PATH = '{repo_path}/get/{version}.tar.gz'
+    FILE_PATH = '{repo_path}/raw/{version}/{path}'
 
 
 class GitLabDownloader(GitHostTarballDownloader):
     SERVER_REGEX = re.compile(r'^gitlab\.')
-    BASE_URL = 'http://{server}'
     TARBALL_PATH = 'api/v4/projects/{repo_path_quoted}/repository/archive.tar.gz?sha={version}'
     FILE_PATH = 'api/v4/projects/{repo_path_quoted}/repository/files/{path_quoted}/raw?ref={version}'
     headers = {'Private-Token': os.environ.get('GITLAB_PRIVATE_TOKEN', '')}
@@ -173,8 +178,8 @@ class GitRev:
     present are GitLab and Github, with some limited support for a local git clone (enough
     to use it as the rosdistro repo).
     """
-    URL_REGEX = re.compile(r'(?:\w+:\/\/|git@)(?P<server>[\w.-]+)[:/](?P<repo_path>[\w/-]*)(?:\.git)?$')
-    URL_DOWNLOADERS = [GitLabDownloader, GithubDownloader]
+    URL_REGEX = re.compile(r'(?:\w+:\/\/|git@)(?P<server>[\w.-]+)[:/](?P<repo_path>[\w/\.-]*?)(?:\.git)?$')
+    URL_DOWNLOADERS = [GitLabDownloader, GithubDownloader, BitbucketDownloader]
     FILE_REGEX = re.compile(r'file:\/\/(?P<repo_path>.+)$')
 
     def __init__(self, repository_descriptor: RepositoryDescriptor):
@@ -202,6 +207,8 @@ class GitRev:
     async def tempdir_download(self):
         dirname = f"colcon-distro--{self.repo_path.replace('/', '-')}--"
         with TemporaryDirectory(prefix=dirname, dir="/var/tmp") as tempdir:
+            if not hasattr(self, 'downloader'):
+                raise DownloadError(f"No downloader available for {self.descriptor.url}")
             self.descriptor.path = Path(tempdir)
             await self.downloader.download_all_to(self.descriptor.path)
             yield

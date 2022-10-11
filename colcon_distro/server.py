@@ -60,7 +60,7 @@ async def get_response_dict(model, dist, ref):
     }
 
 
-@app.route("/get/<dist:string>/<path:path>")
+@app.route("/get/<dist:str>/<path:path>")
 async def get_ref(request, dist: str, path: str):
     if m := re.match(r"^(.*)\.(yaml|json)", path):
         ref, requested_format = m.groups()
@@ -118,6 +118,7 @@ def main():
             port=args.port,
             return_asyncio_server=True
         )
+        await server.startup()
         return await server.serve_forever()
 
     try:
