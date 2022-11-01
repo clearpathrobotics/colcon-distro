@@ -123,10 +123,14 @@ class Model:
             # each so the path is relative to the repo rather than absolute.
             self.semaphore = self.semaphore or asyncio.Semaphore(self.config.get_parallelism())
             async with self.semaphore:
-                async with GitRev(repository_descriptor).tempdir_download():
-                    repository_descriptor.packages = \
-                        discover_augmented_packages(repository_descriptor.path)
-                    augment_repository(repository_descriptor)
+                try:
+                    async with GitRev(repository_descriptor).tempdir_download():
+                        repository_descriptor.packages = \
+                            discover_augmented_packages(repository_descriptor.path)
+                        augment_repository(repository_descriptor)
+                except DownloadError:
+                    repository_descriptor.packages = []
+                    logger.exception('')
 
             # Insert it as a new row, which will set the repo_state_id metadata on it.
             await self.db.insert_repo_state(repository_descriptor)
